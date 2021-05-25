@@ -7,9 +7,12 @@ type error =
 
 val pp_error : error Fmt.t
 
+type recv = unit -> (Cri.Protocol.prefix option * Cri.Protocol.message) option Lwt.t
+type send = { send : 'a. ?prefix:Cri.Protocol.prefix -> 'a Cri.Protocol.t -> 'a -> unit } [@@unboxed]
+type close = unit -> unit
+
 val run :
      ?stop:Lwt_switch.t
   -> ctx:Mimic.ctx
   -> [ `Fiber of (unit, error) result Lwt.t ]
-     * (unit -> (Cri.Protocol.prefix option * Cri.Protocol.message) option Lwt.t)
-     * ((Cri.Protocol.prefix option * Cri.Protocol.send) option -> unit)
+     * recv * send * close

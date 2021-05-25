@@ -1,4 +1,22 @@
+let reporter ppf =
+  let report src level ~over k msgf =
+    let k _ =
+      over () ;
+      k () in
+    let with_metadata header _tags k ppf fmt =
+      Format.kfprintf k ppf
+        ("%a[%a]: " ^^ fmt ^^ "\n%!")
+        Logs_fmt.pp_header (level, header)
+        Fmt.(styled `Magenta string)
+        (Logs.Src.name src) in
+    msgf @@ fun ?header ?tags fmt -> with_metadata header tags k ppf fmt in
+  { Logs.report }
+
 let () = Printexc.record_backtrace true
+let () = Fmt_tty.setup_std_outputs ~style_renderer:`Ansi_tty ~utf_8:true ()
+let () = Logs.set_reporter (reporter Fmt.stdout)
+let () = Logs.set_level ~all:true (Some Logs.Debug)
+let () = Random.self_init ()
 
 let hostname = Domain_name.of_string_exn (Unix.gethostname ())
 
@@ -8,32 +26,62 @@ let romain_calascibetta =
   ; Cri.Protocol.servername= Domain_name.of_string_exn "*"
   ; Cri.Protocol.realname= "Romain Calascibetta" }
 
-let handler ~stop recv send =
+let mirage =
+  { Cri.Protocol.nick= Fmt.strf "mirage-%06x" (Random.bits ())
+  ; hopcount= None }
+
+type state =
+  | Connected
+  | User_sended
+  | Nick_sended
+  | Join
+  | Joined
+
+let handler
+  :    stop:Lwt_switch.t
+    -> state ref
+    -> Cri_lwt.recv
+    -> Cri_lwt.send
+    -> Cri_lwt.close
+    -> unit Lwt.t
+  = fun ~stop state recv { Cri_lwt.send } close ->
   let open Lwt.Infix in
-  let close, u = Lwt.wait () in
+  let closed, u = Lwt.wait () in
+  Lwt_switch.add_hook (Some stop) (fun () -> Lwt.wakeup_later u `Closed ; Lwt.return_unit) ;
   let rec writer () =
-    Lwt.pick [ close; (Lwt.pause () >|= fun () -> `Continue) ] >>= function
+    Lwt.pick [ closed; (Lwt.pause () >|= fun () -> `Continue) ] >>= function
     | `Closed ->
-      Fmt.epr ">>> Closed.\n%!" ;
-      send (Some (None, Cri.Protocol.(Send (User, romain_calascibetta)))) ;
-      send (Some (None, Cri.Protocol.(Send (Quit, "Bye!")))) ;
-      send None ;
+      Logs.debug (fun m -> m "Quit") ;
       Lwt.return_unit
-    | `Continue -> writer () in
+    | `Continue -> match !state with
+      | Connected ->
+        send Cri.Protocol.User romain_calascibetta ;
+        state := User_sended ;
+        writer ()
+      | User_sended ->
+        send Cri.Protocol.Nick mirage ;
+        state := Nick_sended ;
+        writer ()
+      | Nick_sended ->
+        send Cri.Protocol.Join [ Cri.Channel.of_string_exn "#mirage", None ] ;
+        state := Join ;
+        writer ()
+      | Join -> writer ()
+      | Joined ->
+        send Cri.Protocol.Quit "Bye!" ;
+        Lwt_switch.turn_off stop >|= close >>= writer in
   let rec reader () =
-    recv () >>= function
-    | Some (_, Cri.Protocol.Message (Notice, { msg; _ })) ->
-      Fmt.epr ">>> %S.\n%!" msg ;
+    recv () >>= fun v -> match v, !state with
+    | Some (_, Cri.Protocol.Message (Notice, { msg; _ })), _ ->
+      Logs.info (fun m -> m "%s" msg) ;
       reader ()
-    | Some _ -> reader ()
-    | None -> Lwt.return_unit in
-  let timer () =
-    Lwt_unix.sleep 1.5 >>= fun () ->
-    Fmt.epr ">>> Stop!\n%!" ;
-    Lwt_switch.turn_off stop >>= fun () ->
-    Lwt.wakeup_later u `Closed ;
-    Lwt.return_unit in
-  Lwt.join [ writer (); reader (); timer () ]
+    | Some (_, Cri.Protocol.Message (RPL_LUSERCLIENT, _)), Join ->
+      Logs.debug (fun m -> m "The server welcomed!") ;
+      state := Joined ;
+      Lwt.return_unit
+    | Some _, _ -> reader ()
+    | None, _ -> Lwt.return_unit in
+  Lwt.join [ reader (); writer () ]
 
 let host : [ `host ] Domain_name.t Mimic.value = Mimic.make ~name:"host"
 let port : int Mimic.value = Mimic.make ~name:"port"
@@ -63,10 +111,22 @@ let ctx_of_uri uri =
     | None -> ctx in
   ctx
 
+let run ctx =
+  let open Lwt.Infix in
+  let stop = Lwt_switch.create () in
+  let `Fiber th, recv, send, close = Cri_lwt.run ~stop ~ctx in
+  Lwt.both
+    (th >>= function
+     | Ok _ as res -> Lwt.return res
+     | Error _ as res ->
+       Lwt_switch.turn_off stop >|= close >>= fun () ->
+       Lwt.return res)
+    (handler ~stop (ref Connected) recv send close) >>= function
+  | Ok (), () -> Lwt.return_unit
+  | Error err, () ->
+    Fmt.epr "%a.\n%!" Cri_lwt.pp_error err ;
+    Lwt.return_unit
+
 let () =
   let ctx = ctx_of_uri (Uri.of_string Sys.argv.(1)) in
-  let stop = Lwt_switch.create () in
-  let `Fiber th, recv, send = Cri_lwt.run ~stop ~ctx in
-  match Lwt_main.run (Lwt.both th (handler ~stop recv send)) with
-  | Ok (), () -> ()
-  | Error err, () -> Fmt.epr "%a.\n%!" Cri_lwt.pp_error err
+  Lwt_main.run (run ctx)

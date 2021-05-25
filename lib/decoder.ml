@@ -154,11 +154,10 @@ module BNF = struct
       | _ -> true
 
   let params =
-    fix @@ fun params ->
-    take_while1 is_space *>
-      option ([], None)
-        (    (char ':' *> trailing >>| fun v -> [], Some v)
-        <|> (middle >>= fun x -> params >>= fun (r, trailing) -> return ((x :: r), trailing)) )
+    many (take_while1 is_space *> middle) <* take_while is_space >>= fun params ->
+    peek_char >>= function
+    | Some ':' -> char ':' *> trailing >>= fun v -> return (params, Some v)
+    | _ -> return (params, None)
 
   let crlf = string "\r\n"
 
