@@ -1,0 +1,19 @@
+opam-version: "2.0"
+name:         "cri"
+maintainer:   "Romain Calascibetta <romain.calascibetta@gmail.com>"
+authors:      "Romain Calascibetta <romain.calascibetta@gmail.com>"
+homepage:     "https://github.com/dinosaure/cri"
+bug-reports:  "https://github.com/dinosaure/cri/issues"
+dev-repo:     "git+https://github.com/dinosaure/cri.git"
+doc:          "https://dinosaure.github.io/cri/"
+license:      "MIT"
+synopsis:     "Implementation of IRC in OCaml"
+description: """Cri is a simple implementation of IRC in OCaml."""
+
+build: [ "dune" "build" "-p" name "-j" jobs ]
+run-test: [ "dune" "runtest" "-p" name "-j" jobs ]
+
+depends: [
+  "ocaml"       {>= "4.07.0"}
+  "dune"        {>= "2.8.0"}
+]

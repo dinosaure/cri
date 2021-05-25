@@ -1,0 +1,4 @@
+(library
+ (name cri)
+ (public_name cri)
+ (libraries rresult hxd.string hxd.core domain-name fmt angstrom))

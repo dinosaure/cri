@@ -1,0 +1,4 @@
+(library
+ (name cri_lwt)
+ (public_name cri.lwt)
+ (libraries cri ke mimic))
