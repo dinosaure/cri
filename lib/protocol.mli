@@ -1,4 +1,4 @@
-type nick = { nick : string; hopcount : int option; }
+type nick = { nick : Nickname.t; hopcount : int option; }
 
 type user = { username : string
             ; hostname : [ `raw ] Domain_name.t
@@ -20,6 +20,19 @@ type welcome = { nick : string; user : string; host : [ `raw ] Domain_name.t; }
 
 type discover = { users : int; services : int; servers : int; }
 
+type reply =
+  { numeric : int
+  ; params : string list * string option }
+
+type mode =
+  { nickname : Nickname.t
+  ; modes : User_mode.modes }
+
+type names =
+  { channel : Channel.t
+  ; kind : [ `Secret | `Private | `Public ]
+  ; names : Nickname.t list }
+
 type prefix =
   { name : string
   ; user : string option
@@ -35,12 +48,24 @@ type 'a t =
   | SQuit : ([ `raw ] Domain_name.t * string) t
   | Join : (Channel.t * string option) list t
   | Notice : notice t
+  | Mode : mode t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
   | RPL_CREATED : Ptime.t prettier t
   | RPL_MYINFO : string option (* TODO *) t
   | RPL_BOUNCE : string option (* TODO *) t
+  | RPL_LUSEROP : int prettier t
+  | RPL_LUSERUNKNOWN : int prettier t
+  | RPL_LUSERCHANNELS : int prettier t
+  | RPL_LUSERME : (int * int) prettier t
+  | RPL_MOTDSTART : string option t
+  | RPL_MOTD : string prettier t
+  | RPL_ENDOFMOTD : string option t
+  | RPL_TOPIC : (Channel.t * string) t
+  | RPL_NOTOPIC : Channel.t t
+  | RPL_NAMREPLY : names t
+  | RPL : reply t
 
 type command = Command : 'a t -> command
 type message = Message : 'a t * 'a -> message
@@ -59,7 +84,8 @@ val encode : ?prefix:prefix -> Encoder.encoder -> send -> [> Encoder.error ] Enc
 type error =
   [ Decoder.error
   | `Invalid_command
-  | `Invalid_parameters ]
+  | `Invalid_parameters
+  | `Invalid_reply ]
 
 val pp_error : error Fmt.t
 

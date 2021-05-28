@@ -21,13 +21,13 @@ let () = Random.self_init ()
 let hostname = Domain_name.of_string_exn (Unix.gethostname ())
 
 let romain_calascibetta =
-  { Cri.Protocol.username= "romain.calascibetta"
+  { Cri.Protocol.username= "mirage.noisy.bot"
   ; Cri.Protocol.hostname
   ; Cri.Protocol.servername= Domain_name.of_string_exn "*"
-  ; Cri.Protocol.realname= "Romain Calascibetta" }
+  ; Cri.Protocol.realname= "A mirage noisy bot - https://github.com/dinosaure/cri" }
 
 let mirage =
-  { Cri.Protocol.nick= Fmt.strf "mirage-%06x" (Random.bits ())
+  { Cri.Protocol.nick= Cri.Nickname.of_string_exn "noisy-bot"
   ; hopcount= None }
 
 type state =
@@ -44,7 +44,7 @@ let handler
     -> Cri_lwt.send
     -> Cri_lwt.close
     -> unit Lwt.t
-  = fun ~stop state recv { Cri_lwt.send } close ->
+  = fun ~stop state recv { Cri_lwt.send } _close ->
   let open Lwt.Infix in
   let closed, u = Lwt.wait () in
   Lwt_switch.add_hook (Some stop) (fun () -> Lwt.wakeup_later u `Closed ; Lwt.return_unit) ;
@@ -67,9 +67,9 @@ let handler
         state := Join ;
         writer ()
       | Join -> writer ()
-      | Joined ->
-        send Cri.Protocol.Quit "Bye!" ;
-        Lwt_switch.turn_off stop >|= close >>= writer in
+      | Joined -> writer ()
+        (* send Cri.Protocol.Quit "Bye!" ;
+           Lwt_switch.turn_off stop >|= close >>= writer *) in
   let rec reader () =
     recv () >>= fun v -> match v, !state with
     | Some (_, Cri.Protocol.Message (Notice, { msg; _ })), _ ->
