@@ -31,12 +31,13 @@ type mode =
 type names =
   { channel : Channel.t
   ; kind : [ `Secret | `Private | `Public ]
-  ; names : Nickname.t list }
+  ; names : ([ `Operator | `Voice | `None ] * Nickname.t) list }
 
 type prefix =
-  { name : string
-  ; user : string option
-  ; host : [ `raw ] Domain_name.t option }
+  | Server of [ `raw ] Domain_name.t
+  | User of { name : Nickname.t
+            ; user : string option
+            ; host : [ `raw ] Domain_name.t option }
 
 type 'a t =
   | Pass : string t
@@ -65,6 +66,7 @@ type 'a t =
   | RPL_TOPIC : (Channel.t * string) t
   | RPL_NOTOPIC : Channel.t t
   | RPL_NAMREPLY : names t
+  | RPL_ENDOFNAMES : Channel.t t 
   | RPL : reply t
 
 type command = Command : 'a t -> command
@@ -74,7 +76,7 @@ type 'a recv =
   | Recv : 'a t -> 'a recv
   | Any : message recv
 
-val prefix : ?user:string -> ?host:[ `raw ] Domain_name.t -> string -> prefix
+val prefix : ?user:string -> ?host:[ `raw ] Domain_name.t -> Nickname.t -> prefix
 val send : 'a t -> 'a -> send
 val recv : 'a t -> 'a recv
 val any : message recv

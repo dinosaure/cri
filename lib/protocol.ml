@@ -33,12 +33,13 @@ type mode =
 type names =
   { channel : Channel.t
   ; kind : [ `Secret | `Private | `Public ]
-  ; names : Nickname.t list }
+  ; names : ([ `Operator | `Voice | `None ] * Nickname.t) list }
 
 type prefix =
-  { name : string
-  ; user : string option
-  ; host : [ `raw ] Domain_name.t option }
+  | Server of [ `raw ] Domain_name.t
+  | User of { name : Nickname.t
+            ; user : string option
+            ; host : [ `raw ] Domain_name.t option }
 
 module Fun = struct
   type ('k, 'res) args =
@@ -77,6 +78,7 @@ type 'a t =
   | RPL_TOPIC : (Channel.t * string) t
   | RPL_NOTOPIC : Channel.t t
   | RPL_NAMREPLY : names t
+  | RPL_ENDOFNAMES : Channel.t t
   | RPL : reply t
 
 type command = Command : 'a t -> command
@@ -109,6 +111,8 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
   | "376" -> Ok (Command RPL_ENDOFMOTD)
   | "331" -> Ok (Command RPL_NOTOPIC)
   | "332" -> Ok (Command RPL_TOPIC)
+  | "353" -> Ok (Command RPL_NAMREPLY)
+  | "366" -> Ok (Command RPL_ENDOFNAMES)
   | _ -> Rresult.R.error_msgf "Unknown command: %S" command
 
 type send = Send : 'a t * 'a -> send
@@ -117,8 +121,9 @@ type 'a recv =
   | Recv : 'a t -> 'a recv
   | Any : message recv
 
-let to_prefix = function
-  | Some { name; user; host; } -> Some (name, user, Option.map Domain_name.to_string host)
+let to_prefix : prefix option -> _ = function
+  | Some (User { name; user; host; }) -> Some (`User (Nickname.to_string name, user, Option.map Domain_name.to_string host))
+  | Some (Server v) -> Some (`Server (Domain_name.to_string v))
   | None -> None
 
 let of_prettier pp = function
@@ -238,6 +243,18 @@ let to_line
       to_prefix prefix, "332", ([ Channel.to_string channel ], Some topic)
     | RPL_NOTOPIC, channel ->
       to_prefix prefix, "331", ([ Channel.to_string channel ], None)
+    | RPL_NAMREPLY, { channel; kind; names; } ->
+      let kind_to_string = function
+        | `Secret -> "@" | `Private -> "*" | `Public -> "=" in
+      let params = [ Channel.to_string channel; kind_to_string kind ] in 
+      let pp_name ppf = function
+        | `None, nickname -> Nickname.pp ppf nickname
+        | `Operator, nickname -> Fmt.pf ppf "@%a" Nickname.pp nickname
+        | `Voice, nickname -> Fmt.pf ppf "+%a" Nickname.pp nickname in
+      let msg = Fmt.str "%a" Fmt.(list ~sep:(const string " ") pp_name) names in
+      to_prefix prefix, "353", (params, Some msg)
+    | RPL_ENDOFNAMES, channel ->
+      to_prefix prefix, "366", ([ Channel.to_string channel ], None)
     | RPL, { numeric; params; } ->
       to_prefix prefix, (Fmt.str "%03d" numeric), params
 
@@ -249,16 +266,34 @@ let apply_keys channels keys =
       | [] -> go ((channel, None) :: acc) channels [] in
   go [] channels keys
 
+let kind_of_string_exn = function
+  | "=" -> `Public
+  | "*" -> `Private
+  | "@" -> `Secret
+  | str -> Fmt.invalid_arg "Invalid type of channel: %S" str
+
+let rec name_of_string_exn str =
+  if str = "" then Fmt.invalid_arg "Empty nickname" ;
+  match str.[0] with
+  | '@' -> `Operator, Nickname.of_string_exn (chop str)
+  | '+' -> `Voice, Nickname.of_string_exn (chop str)
+  | _   -> `None, Nickname.of_string_exn str
+and chop str = String.sub str 1 (String.length str - 1)
+
 let rec of_line
   : type a. a recv
          -> Decoder.t
          -> (prefix option * a, [ `Invalid_parameters | `Invalid_command | `Invalid_reply ]) result
   = fun w ((prefix, command, vs) as line) ->
-  let prefix = match prefix with
+  let prefix : prefix option = match prefix with
     | None -> None
-    | Some (name, user, host) ->
+    | Some (`Server servername) ->
+      let servername = Domain_name.of_string_exn servername in
+      Some (Server servername)
+    | Some (`User (name, user, host)) ->
+      let name = Nickname.of_string_exn name in
       let host = Option.map Domain_name.of_string_exn host in
-      Some { name; user; host; } in
+      Some (User { name; user; host; }) in
   match w, String.lowercase_ascii command, vs with
   | Recv Pass, "pass", ([ pass ], _) -> Ok (prefix, pass)
   | Recv Nick, "nick", ([ nick ], _) ->
@@ -328,6 +363,19 @@ let rec of_line
   | Recv RPL_NOTOPIC,       "331", ([ channel ], _) ->
     ( try Ok (prefix, Channel.of_string_exn channel)
       with _ -> Error `Invalid_parameters )
+  | Recv RPL_NAMREPLY,      "353", ((_ :: _ as params), Some names) ->
+    ( match List.rev params with
+    | channel :: kind :: _ ->
+      ( try let channel = Channel.of_string_exn channel in
+            let kind = kind_of_string_exn kind in
+            let names = List.map name_of_string_exn (Astring.String.cuts ~sep:" " names) in
+            Ok (prefix, { channel; kind; names; })
+        with _ -> Error `Invalid_parameters )
+    | _ -> Error `Invalid_parameters )
+  | Recv RPL_ENDOFNAMES,    "366", ((_ :: _ as params), _) ->
+    ( try let channel = Channel.of_string_exn (List.hd (List.rev params) ) in
+          Ok (prefix, channel)
+      with _ -> Error `Invalid_parameters )
   | Recv RPL, numeric, params ->
     ( try Ok (prefix, { numeric= int_of_string numeric; params; })
       with _ -> Error `Invalid_reply )
@@ -339,8 +387,8 @@ let rec of_line
       | Error _ as err -> err )
   | _ -> Error `Invalid_command
 
-let prefix ?user ?host name =
-  { name; user; host; }
+let prefix ?user ?host name : prefix =
+  User { name; user; host; }
 
 let send : type a. a t -> a -> send
   = fun w v -> Send (w, v)

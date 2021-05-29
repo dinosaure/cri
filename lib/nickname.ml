@@ -14,9 +14,10 @@ let is = function
   | '\x7b' .. '\x7d' -> true
   | _ -> false
 
-let of_string str =
+let of_string ?(strict= false) str =
   if str = "" then Rresult.R.error_msgf "A nickname can not be empty"
-  else if String.length str > 9 then Rresult.R.error_msgf "A nickname can not be larger than 9 bytes"
+  else if String.length str > 9 && strict
+  then Rresult.R.error_msgf "A nickname can not be larger than 9 bytes"
   else match str.[0] with
     | 'a' .. 'z'
     | 'A' .. 'Z'
@@ -28,5 +29,7 @@ let of_string str =
 
 let to_string x = x
 
-let of_string_exn str = match of_string str with
+let of_string_exn ?strict str = match of_string ?strict str with
   | Ok v -> v | Error (`Msg err) -> invalid_arg err
+
+let pp = Fmt.string

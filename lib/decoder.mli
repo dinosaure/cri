@@ -19,7 +19,9 @@ val decoder : unit -> decoder
 val decoder_from : string -> decoder
 val io_buffer_size : int
 
-type t = (string * string option * string option) option * string * (string list * string option)
+type t =
+   [ `User of (string * string option * string option) | `Server of string ] option
+  * string * (string list * string option)
 
 val junk_eol : decoder -> unit
 

@@ -127,10 +127,14 @@ module BNF = struct
     return (String.make 1 chr ^ str)
 
   let prefix =
-    (servername <|> nick) >>= fun who ->
-    option None (char '!' *> user >>| Option.some) >>= fun user ->
-    option None (char '@' *> host >>| Option.some) >>= fun host ->
-    return (who, user, host) <* take_while1 is_space
+    choice
+      [ (nick >>= fun who ->
+         option None (char '!' *> user >>| Option.some) >>= fun user ->
+         option None (char '@' *> host >>| Option.some) >>= fun host ->
+         take_while1 is_space *>
+         return (`User (who, user, host)))
+      ; (servername <* take_while1 is_space >>= fun v ->
+         return (`Server v)) ]
 
   let for_all p str =
     let res = ref true in
@@ -162,7 +166,7 @@ module BNF = struct
   let crlf = string "\r\n"
 
   let message =
-    option None ((char ':' *> prefix) >>| Option.some <?> "prefix") >>= fun prefix ->
+    option None (char ':' *> prefix >>= fun v -> return (Some v)) >>= fun prefix ->
     (command <?> "command") >>= fun command ->
     (params <?> "params") >>= fun params ->
     return (prefix, command, params) <* crlf
@@ -179,7 +183,9 @@ let junk_eol decoder =
   then decoder.pos <- !idx + 1
   else leave_with decoder `Expected_eol
 
-type t = (string * string option * string option) option * string * (string list * string option)
+type t =
+   [ `User of (string * string option * string option) | `Server of string ] option
+  * string * (string list * string option)
 
 let peek_line ~k decoder =
   let k decoder =
@@ -187,7 +193,8 @@ let peek_line ~k decoder =
     let str = Bytes.sub_string buffer off len in
     match Angstrom.parse_string ~consume:All BNF.message str with
     | Ok v -> k v decoder
-    | Error _ ->
+    | Error err ->
+      Fmt.epr ">>> %S.\n%!" err ;
       let line = String.sub str 0 (String.length str - 2) in
       decoder.pos <- decoder.pos + len ;
       leave_with decoder (`Invalid_line line) in

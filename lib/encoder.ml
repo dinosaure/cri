@@ -53,23 +53,25 @@ let blit ~buf ~off ~len encoder =
     if len < l then leave_with encoder `No_enough_space in
   go 0 len encoder
 
-type t = (string * string option * string option) option * string * (string list * string option)
+type t =
+    [ `User of (string * string option * string option) | `Server of string ] option
+  * string * (string list * string option)
 
 let write_crlf encoder = write "\r\n" encoder
 let write_space encoder = write " " encoder
 
 let write_prefix prefix encoder = match prefix with
-  | name, None, None ->
+  | `User (name, None, None) ->
     write ":" encoder ;
     write name encoder ;
     write_space encoder
-  | name, Some user, None ->
+  | `User (name, Some user, None) ->
     write ":" encoder ;
     write name encoder ;
     write "!" encoder ;
     write user encoder ;
     write_space encoder
-  | name, Some user, Some host ->
+  | `User (name, Some user, Some host) ->
     write ":" encoder ;
     write name encoder ;
     write "!" encoder ;
@@ -77,11 +79,15 @@ let write_prefix prefix encoder = match prefix with
     write "@" encoder ;
     write host encoder ;
     write_space encoder
-  | name, None, Some host ->
+  | `User (name, None, Some host) ->
     write ":" encoder ;
     write name encoder ;
     write "@" encoder ;
     write host encoder ;
+    write_space encoder
+  | `Server servername ->
+    write ":" encoder ;
+    write servername encoder ;
     write_space encoder
 
 let encode_line encoder = function

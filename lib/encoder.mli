@@ -14,6 +14,8 @@ val flush : (unit -> ([> error ] as 'err) state) -> encoder -> 'err state
 val write : string -> encoder -> unit
 val blit : buf:string -> off:int -> len:int -> encoder -> unit
 
-type t = (string * string option * string option) option * string * (string list * string option)
+type t =
+    [ `User of (string * string option * string option) | `Server of string ] option
+  * string * (string list * string option)
 
 val encode_line : (unit -> ([> error ] as 'err) state) -> encoder -> t -> 'err state
