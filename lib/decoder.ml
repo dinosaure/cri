@@ -65,7 +65,8 @@ let rec prompt
     go ~k decoder decoder.max
 and go ~k decoder off =
   if off = Bytes.length decoder.buffer
-  then assert false
+     && not (at_least_one_line { decoder with max= off })
+  then assert false (* TODO *)
   else if not (at_least_one_line { decoder with max = off })
   then Read { buffer= decoder.buffer; off; len= Bytes.length decoder.buffer - off;
               continue= (fun len -> go ~k decoder (off + len)); }
@@ -94,6 +95,8 @@ module BNF = struct
       then fail "name"
       else return str
     | _ -> fail "name"
+
+  (* TODO(dinosaure): [ip6addr]. *)
 
   let host = name >>= fun x -> many (char '.' *> name) >>= fun r -> return (x :: r)
   let host = host >>| String.concat "."

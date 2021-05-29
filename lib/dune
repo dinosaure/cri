@@ -1,4 +1,4 @@
 (library
  (name cri)
  (public_name cri)
- (libraries rresult ptime hxd.string hxd.core domain-name fmt angstrom))
+ (libraries ke rresult ptime hxd.string hxd.core domain-name fmt angstrom))

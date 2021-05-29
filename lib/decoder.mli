@@ -23,6 +23,13 @@ type t =
    [ `User of (string * string option * string option) | `Server of string ] option
   * string * (string list * string option)
 
+module BNF : sig
+  val name : string Angstrom.t
+  val host : string Angstrom.t
+  val servername : string Angstrom.t
+  val user : string Angstrom.t
+end
+
 val junk_eol : decoder -> unit
 
 val peek_line :

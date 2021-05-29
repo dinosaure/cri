@@ -62,6 +62,9 @@ type 'a t =
   | Join : (Channel.t * string option) list t
   | Notice : notice t
   | Mode : mode t
+  | Privmsg : (Destination.t list * string) t
+  | Ping : [ `raw ] Domain_name.t list t
+  | Pong : [ `raw ] Domain_name.t list t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -95,6 +98,9 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
   | "notice" -> Ok (Command Notice)
   | "join" -> Ok (Command Join)
   | "mode" -> Ok (Command Mode)
+  | "privmsg" -> Ok (Command Privmsg)
+  | "ping" -> Ok (Command Ping)
+  | "pong" -> Ok (Command Pong)
   | "001" -> Ok (Command RPL_WELCOME)
   | "002" -> Ok (Command RPL_YOURHOST)
   | "003" -> Ok (Command RPL_CREATED)
@@ -196,6 +202,16 @@ let to_line
       to_prefix prefix, "join", ([ channels; keys; ], None)
     | Mode, { nickname; modes; } ->
       to_prefix prefix, "mode", ([ Nickname.to_string nickname ], Some (User_mode.to_string modes))
+    | Privmsg, (dsts, msg) ->
+      let dsts = List.map Destination.to_string dsts in
+      let dsts = String.concat "," dsts in
+      to_prefix prefix, "privmsg", ([ dsts ], Some msg)
+    | Ping, servers ->
+      let servers = List.map Domain_name.to_string servers in
+      to_prefix prefix, "ping", (servers, None)
+    | Pong, servers ->
+      let servers = List.map Domain_name.to_string servers in
+      to_prefix prefix, "pong", (servers, None)
     | RPL_WELCOME, v ->
       let param = match v with
         | `Pretty { nick; _ } -> [ nick ]
@@ -343,6 +359,21 @@ let rec of_line
     ( match Nickname.of_string nickname, User_mode.of_string modes with
     | Ok nickname, Ok modes -> Ok (prefix, { nickname; modes; })
     | _ -> Error `Invalid_parameters )
+  | Recv Privmsg, "privmsg", ([ dsts ], msg) ->
+    ( try let dsts = Destination.of_string_exn dsts in
+          let msg = Option.value ~default:"" msg in
+          Ok (prefix, (dsts, msg))
+      with _ -> Error `Invalid_parameters )
+  | Recv Ping, "ping", (servers, server) ->
+    let servers = match server with Some v -> servers @ [ v ] | None -> servers in
+    ( try let servers = List.map Domain_name.of_string_exn servers in
+          Ok (prefix, servers)
+      with _ -> Error `Invalid_parameters )
+  | Recv Pong, "pong", (servers, server) ->
+    let servers = match server with Some v -> servers @ [ v ] | None -> servers in
+    ( try let servers = List.map Domain_name.of_string_exn servers in
+          Ok (prefix, servers)
+      with _ -> Error `Invalid_parameters )
   | Recv RPL_WELCOME,       "001", params -> Ok (prefix, to_prettier RPL_WELCOME       params)
   | Recv RPL_YOURHOST,      "002", params -> Ok (prefix, to_prettier RPL_YOURHOST      params)
   | Recv RPL_CREATED,       "003", params -> Ok (prefix, to_prettier RPL_CREATED       params)

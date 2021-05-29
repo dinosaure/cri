@@ -1,0 +1,7 @@
+(executable
+ (name test)
+ (libraries cri alcotest))
+
+(rule
+ (alias runtest)
+ (action (run ./test.exe --color=always)))

@@ -66,10 +66,8 @@ let handler
         send Cri.Protocol.Join [ Cri.Channel.of_string_exn "#mirage", None ] ;
         state := Join ;
         writer ()
-      | Join -> writer ()
-      | Joined -> writer ()
-        (* send Cri.Protocol.Quit "Bye!" ;
-           Lwt_switch.turn_off stop >|= close >>= writer *) in
+      | Join -> Lwt.pause () >>= writer
+      | Joined -> Lwt.return_unit in
   let rec reader () =
     recv () >>= fun v -> match v, !state with
     | Some (_, Cri.Protocol.Message (Notice, { msg; _ })), _ ->
@@ -79,6 +77,9 @@ let handler
       Logs.debug (fun m -> m "The server welcomed!") ;
       state := Joined ;
       Lwt.return_unit
+    | Some (_, Cri.Protocol.Message (Ping, vs)), _ ->
+      send Cri.Protocol.Pong vs ;
+      reader ()
     | Some _, _ -> reader ()
     | None, _ -> Lwt.return_unit in
   Lwt.join [ reader (); writer () ]
