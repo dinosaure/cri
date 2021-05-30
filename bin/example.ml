@@ -12,6 +12,8 @@ let reporter ppf =
     msgf @@ fun ?header ?tags fmt -> with_metadata header tags k ppf fmt in
   { Logs.report }
 
+let ( <.> ) f g = fun x -> f (g x)
+
 let () = Printexc.record_backtrace true
 let () = Fmt_tty.setup_std_outputs ~style_renderer:`Ansi_tty ~utf_8:true ()
 let () = Logs.set_reporter (reporter Fmt.stdout)
@@ -20,70 +22,14 @@ let () = Random.self_init ()
 
 let hostname = Domain_name.of_string_exn (Unix.gethostname ())
 
-let romain_calascibetta =
+let user =
   { Cri.Protocol.username= "mirage.noisy.bot"
   ; Cri.Protocol.hostname
   ; Cri.Protocol.servername= Domain_name.of_string_exn "*"
   ; Cri.Protocol.realname= "A mirage noisy bot - https://github.com/dinosaure/cri" }
 
-let mirage =
-  { Cri.Protocol.nick= Cri.Nickname.of_string_exn "noisy-bot"
-  ; hopcount= None }
-
-type state =
-  | Connected
-  | User_sended
-  | Nick_sended
-  | Join
-  | Joined
-
-let handler
-  :    stop:Lwt_switch.t
-    -> state ref
-    -> Cri_lwt.recv
-    -> Cri_lwt.send
-    -> Cri_lwt.close
-    -> unit Lwt.t
-  = fun ~stop state recv { Cri_lwt.send } _close ->
-  let open Lwt.Infix in
-  let closed, u = Lwt.wait () in
-  Lwt_switch.add_hook (Some stop) (fun () -> Lwt.wakeup_later u `Closed ; Lwt.return_unit) ;
-  let rec writer () =
-    Lwt.pick [ closed; (Lwt.pause () >|= fun () -> `Continue) ] >>= function
-    | `Closed ->
-      Logs.debug (fun m -> m "Quit") ;
-      Lwt.return_unit
-    | `Continue -> match !state with
-      | Connected ->
-        send Cri.Protocol.User romain_calascibetta ;
-        state := User_sended ;
-        writer ()
-      | User_sended ->
-        send Cri.Protocol.Nick mirage ;
-        state := Nick_sended ;
-        writer ()
-      | Nick_sended ->
-        send Cri.Protocol.Join [ Cri.Channel.of_string_exn "#mirage", None ] ;
-        state := Join ;
-        writer ()
-      | Join -> Lwt.pause () >>= writer
-      | Joined -> Lwt.return_unit in
-  let rec reader () =
-    recv () >>= fun v -> match v, !state with
-    | Some (_, Cri.Protocol.Message (Notice, { msg; _ })), _ ->
-      Logs.info (fun m -> m "%s" msg) ;
-      Lwt.pause () >>= reader
-    | Some (_, Cri.Protocol.Message (RPL_LUSERCLIENT, _)), Join ->
-      Logs.debug (fun m -> m "The server welcomed!") ;
-      state := Joined ;
-      Lwt.pause () >>= reader
-    | Some (_, Cri.Protocol.Message (Ping, v)), _ ->
-      Logs.debug (fun m -> m "Respond with pong.") ;
-      send Cri.Protocol.Pong v ;
-      Lwt.pause () >>= reader
-    | Some _, _ -> reader ()
-    | None, _ -> Lwt.return_unit in
-  Lwt.join [ reader (); writer () ]
+let noisy_bot = Cri.Nickname.of_string_exn "noisy-bot"
+let mirage = Cri.Channel.of_string_exn "#mirage"
 
 let host : [ `host ] Domain_name.t Mimic.value = Mimic.make ~name:"host"
 let port : int Mimic.value = Mimic.make ~name:"port"
@@ -113,9 +59,15 @@ let ctx_of_uri uri =
     | None -> ctx in
   ctx
 
+let sleep_ns = Lwt_unix.sleep <.> ( *. ) 1e-9 <.> Int64.to_float
+
+let log _msgs = Lwt.return_unit
+
 let run ctx =
   let open Lwt.Infix in
   let stop = Lwt_switch.create () in
+  let state = Cri_logger.state ~user ~channel:mirage ~nickname:noisy_bot
+    ~tick:1_000_000_000L log in
   let `Fiber th, recv, send, close = Cri_lwt.run ~stop ~ctx in
   Lwt.both
     (th >>= function
@@ -123,10 +75,17 @@ let run ctx =
      | Error _ as res ->
        Lwt_switch.turn_off stop >|= close >>= fun () ->
        Lwt.return res)
-    (handler ~stop (ref Connected) recv send close) >>= function
-  | Ok (), () -> Lwt.return_unit
-  | Error err, () ->
+    (Cri_logger.handler ~sleep_ns ~stop state recv send close) >>= function
+  | Ok (), Ok () -> Lwt.return_unit
+  | Error err, Ok () ->
     Fmt.epr "%a.\n%!" Cri_lwt.pp_error err ;
+    Lwt.return_unit
+  | Ok (), Error err ->
+    Fmt.epr "%a.\n%!" Cri_logger.pp_error err ;
+    Lwt.return_unit
+  | Error err0, Error err1 ->
+    Fmt.epr "%a.\n%!" Cri_lwt.pp_error err0 ;
+    Fmt.epr "%a.\n%!" Cri_logger.pp_error err1 ;
     Lwt.return_unit
 
 let () =

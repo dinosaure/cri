@@ -1,0 +1,4 @@
+(library
+ (name cri_logger)
+ (public_name cri.logger)
+ (libraries cri cri.lwt))

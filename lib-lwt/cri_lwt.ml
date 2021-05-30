@@ -41,17 +41,15 @@ let rec reader ?stop ~push flow =
     with _ -> push None ; Lwt.return_ok () )
 and go ~stop ~push dec ke flow = function
   | Decoder.Done msg ->
-    Log.debug (fun m -> m "`Done") ;
     ( try push (Some msg) with _ -> () ) ;
+    Log.debug (fun m -> m "Pause and waiting message.") ;
     ( Lwt.pick [ (Lwt.pause () >|= fun () -> `Continue)
                ; stop ] >>= function
     | `Continue -> go ~stop ~push dec ke flow (Protocol.decode dec Protocol.Any)
     | `Stop -> push None ; Lwt.return_ok () )
   | Decoder.Read { buffer; off; len; continue; } as state ->
-    Log.debug (fun m -> m "`Read") ;
     ( match Ke.Rke.N.peek ke with
     | [] ->
-      Log.debug (fun m -> m "Try to read.") ;
       ( Lwt.pick [ (Mimic.read flow >|= fun res -> (res :> (signal, _) result))
                  ; (stop >|= fun v -> Rresult.R.ok (v :> signal)) ] >>= function
       | Error err -> Lwt.return_error (err :> error)
@@ -61,7 +59,6 @@ and go ~stop ~push dec ke flow = function
       | Ok `Eof ->
         push None ; Lwt.return_error `End_of_input
       | Ok (`Data cs) ->
-        Log.debug (fun m -> m "<<< @[<hov>%a@]" (Hxd_string.pp Hxd.default) (Cstruct.to_string cs)) ;
         Ke.Rke.N.push ke ~blit:blit0 ~length:Cstruct.length ~off:0 ~len:(Cstruct.length cs) cs ;
         go ~stop ~push dec ke flow state )
     | _ ->
@@ -93,7 +90,6 @@ and go ~next allocator enc flow = function
       Log.debug (fun m -> m "Terminate the writer.") ;
       Lwt.return_ok () )
   | Encoder.Write { buffer; off; len; continue; } ->
-    Log.debug (fun m -> m ">>> @[<hov>%a@]" (Hxd_string.pp Hxd.default) (String.sub buffer off len)) ;
     let cs = Cstruct.of_string ~allocator ~off ~len buffer in
     ( Mimic.write flow cs >>= function
     | Ok () -> go ~next allocator enc flow (continue len)
