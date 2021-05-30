@@ -80,7 +80,9 @@ let rec writer ~next flow =
   Lwt.pause () >>= next >>= function
   | Some (prefix, send) ->
     go ~next allocator enc flow (Protocol.encode ?prefix enc send)
-  | None -> Lwt.return_ok ()
+  | None ->
+    Log.debug (fun m -> m "End of the writer.") ;
+    Lwt.return_ok ()
 and go ~next allocator enc flow = function
   | Encoder.Done ->
     Log.debug (fun m -> m "Pause and next operation to emit.") ;

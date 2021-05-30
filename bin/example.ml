@@ -72,14 +72,15 @@ let handler
     recv () >>= fun v -> match v, !state with
     | Some (_, Cri.Protocol.Message (Notice, { msg; _ })), _ ->
       Logs.info (fun m -> m "%s" msg) ;
-      reader ()
+      Lwt.pause () >>= reader
     | Some (_, Cri.Protocol.Message (RPL_LUSERCLIENT, _)), Join ->
       Logs.debug (fun m -> m "The server welcomed!") ;
       state := Joined ;
-      Lwt.return_unit
-    | Some (_, Cri.Protocol.Message (Ping, vs)), _ ->
-      send Cri.Protocol.Pong vs ;
-      reader ()
+      Lwt.pause () >>= reader
+    | Some (_, Cri.Protocol.Message (Ping, v)), _ ->
+      Logs.debug (fun m -> m "Respond with pong.") ;
+      send Cri.Protocol.Pong v ;
+      Lwt.pause () >>= reader
     | Some _, _ -> reader ()
     | None, _ -> Lwt.return_unit in
   Lwt.join [ reader (); writer () ]

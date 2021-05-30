@@ -14,7 +14,7 @@ let test02 =
   let line = "PING :zinc.libera.chat\r\n" in
   let dec = Cri.Decoder.decoder_from line in
   match Cri.Protocol.decode dec Cri.Protocol.any with
-  | Cri.Decoder.Done (None, Cri.Protocol.Message (Ping, [ v ])) ->
+  | Cri.Decoder.Done (None, Cri.Protocol.Message (Ping, (None, Some v))) ->
     Alcotest.(check domain_name) "domain-name" v (Domain_name.of_string_exn "zinc.libera.chat")
   | Cri.Decoder.Done _ -> Alcotest.failf "Unexpected message"
   | _ -> Alcotest.failf "Invalid state of decoding"

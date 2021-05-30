@@ -51,8 +51,8 @@ type 'a t =
   | Notice : notice t
   | Mode : mode t
   | Privmsg : (Destination.t list * string) t
-  | Ping : [ `raw ] Domain_name.t list t
-  | Pong : [ `raw ] Domain_name.t list t
+  | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
+  | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t

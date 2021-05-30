@@ -63,8 +63,8 @@ type 'a t =
   | Notice : notice t
   | Mode : mode t
   | Privmsg : (Destination.t list * string) t
-  | Ping : [ `raw ] Domain_name.t list t
-  | Pong : [ `raw ] Domain_name.t list t
+  | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
+  | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -206,12 +206,20 @@ let to_line
       let dsts = List.map Destination.to_string dsts in
       let dsts = String.concat "," dsts in
       to_prefix prefix, "privmsg", ([ dsts ], Some msg)
-    | Ping, servers ->
-      let servers = List.map Domain_name.to_string servers in
-      to_prefix prefix, "ping", (servers, None)
-    | Pong, servers ->
-      let servers = List.map Domain_name.to_string servers in
-      to_prefix prefix, "pong", (servers, None)
+    | Ping, (src, dst) ->
+      ( match src, dst with
+      | Some src, None -> to_prefix prefix, "ping", ([ Domain_name.to_string src ], None)
+      | None, Some dst -> to_prefix prefix, "ping", ([], Some (Domain_name.to_string dst))
+      | Some src, Some dst ->
+        to_prefix prefix, "ping", ([ Domain_name.to_string src; Domain_name.to_string dst ], None)
+      | None, None -> assert false (* TODO *) )
+    | Pong, (src, dst) ->
+      ( match src, dst with
+      | Some src, None -> to_prefix prefix, "pong", ([ Domain_name.to_string src ], None)
+      | None, Some dst -> to_prefix prefix, "pong", ([], Some (Domain_name.to_string dst))
+      | Some src, Some dst ->
+        to_prefix prefix, "pong", ([ Domain_name.to_string src; Domain_name.to_string dst ], None)
+      | None, None -> assert false (* TODO *) )
     | RPL_WELCOME, v ->
       let param = match v with
         | `Pretty { nick; _ } -> [ nick ]
@@ -364,16 +372,38 @@ let rec of_line
           let msg = Option.value ~default:"" msg in
           Ok (prefix, (dsts, msg))
       with _ -> Error `Invalid_parameters )
-  | Recv Ping, "ping", (servers, server) ->
-    let servers = match server with Some v -> servers @ [ v ] | None -> servers in
-    ( try let servers = List.map Domain_name.of_string_exn servers in
-          Ok (prefix, servers)
-      with _ -> Error `Invalid_parameters )
-  | Recv Pong, "pong", (servers, server) ->
-    let servers = match server with Some v -> servers @ [ v ] | None -> servers in
-    ( try let servers = List.map Domain_name.of_string_exn servers in
-          Ok (prefix, servers)
-      with _ -> Error `Invalid_parameters )
+  | Recv Ping, "ping", params ->
+    ( match params with
+    | [ src; dst ], None | [ src ], Some dst ->
+      ( try let src = Domain_name.of_string_exn src in
+            let dst = Domain_name.of_string_exn dst in
+            Ok (prefix, (Some src, Some dst))
+        with _ -> Error `Invalid_parameters )
+    | [ src ], None ->
+      ( try let src = Domain_name.of_string_exn src in
+            Ok (prefix, (Some src, None))
+        with _ -> Error `Invalid_parameters )
+    | [], Some dst ->
+      ( try let dst = Domain_name.of_string_exn dst in
+            Ok (prefix, (None, Some dst))
+        with _ -> Error `Invalid_parameters )
+    | _ -> Error `Invalid_parameters )
+  | Recv Pong, "pong", params ->
+    ( match params with
+    | [ src; dst ], None | [ src ], Some dst ->
+      ( try let src = Domain_name.of_string_exn src in
+            let dst = Domain_name.of_string_exn dst in
+            Ok (prefix, (Some src, Some dst))
+        with _ -> Error `Invalid_parameters )
+    | [ src ], None ->
+      ( try let src = Domain_name.of_string_exn src in
+            Ok (prefix, (Some src, None))
+        with _ -> Error `Invalid_parameters )
+    | [], Some dst ->
+      ( try let dst = Domain_name.of_string_exn dst in
+            Ok (prefix, (None, Some dst))
+        with _ -> Error `Invalid_parameters )
+    | _ -> Error `Invalid_parameters )
   | Recv RPL_WELCOME,       "001", params -> Ok (prefix, to_prettier RPL_WELCOME       params)
   | Recv RPL_YOURHOST,      "002", params -> Ok (prefix, to_prettier RPL_YOURHOST      params)
   | Recv RPL_CREATED,       "003", params -> Ok (prefix, to_prettier RPL_CREATED       params)
