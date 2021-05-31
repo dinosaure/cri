@@ -1,16 +1,20 @@
 type mask = |
 
+type host =
+  [ `Host of [ `raw ] Domain_name.t
+  | `Ip6 of Ipaddr.V6.t ]
+
 type t =
   | Channel of Channel.t
   | User_with_servername of { user : string
-                            ; host : [ `raw ] Domain_name.t option
-                            ; servername : [ `raw ] Domain_name.t }
+                            ; host : host option
+                            ; servername : host }
   | User_with_host of { user : string
-                      ; host : [ `raw ] Domain_name.t }
+                      ; host : host }
   | Nickname of Nickname.t
   | Full_nickname of { nick : Nickname.t
                      ; user : string
-                     ; host : [ `raw ] Domain_name.t }
+                     ; host : host }
   | Mask of mask
 
 val pp : t Fmt.t

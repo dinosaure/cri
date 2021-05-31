@@ -86,6 +86,10 @@ let peek_while_eol decoder =
 module BNF = struct
   open Angstrom
 
+  let is_digit = function
+    | '0' .. '9' -> true
+    | _ -> false
+
   let name = peek_char >>= function
     | None | Some ('a' .. 'z' | 'A' .. 'Z') ->
       ( take_while1 @@ function
@@ -96,10 +100,18 @@ module BNF = struct
       else return str
     | _ -> fail "name"
 
-  (* TODO(dinosaure): [ip6addr]. *)
+  let ip6addr =
+    take_while1 is_digit >>= fun x ->
+    count 7 (char ':' *> take_while1 is_digit) >>= fun r ->
+    let ipv6 = String.concat ":" (x :: r) in
+    try Fmt.epr ">>> %S.\n%!" ipv6 ; return (Ipaddr.V6.of_string_exn ipv6)
+    with _ -> fail "ip6addr"
 
   let host = name >>= fun x -> many (char '.' *> name) >>= fun r -> return (x :: r)
-  let host = host >>| String.concat "."
+  let host =
+        (host >>| String.concat "." >>| fun v -> `Host v)
+    <|> (ip6addr >>| fun v -> `Ip6 v)
+
   let servername = host
 
   let is_letter = function
@@ -111,7 +123,7 @@ module BNF = struct
     | _ -> false
 
   let is_special = function
-    | '-' | '[' | ']' | '\\' | '`' | '^' | '{' | '}' -> true
+    | '-' | '[' | ']' | '\\' | '`' | '^' | '{' | '}' | '_' -> true
     | _ -> false
 
   let is_space = (=) ' '
@@ -186,8 +198,12 @@ let junk_eol decoder =
   then decoder.pos <- !idx + 1
   else leave_with decoder `Expected_eol
 
+type host =
+  [ `Host of string
+  | `Ip6 of Ipaddr.V6.t ]
+
 type t =
-   [ `User of (string * string option * string option) | `Server of string ] option
+   [ `User of (string* string option * host option) | `Server of host ] option
   * string * (string list * string option)
 
 let peek_line ~k decoder =
@@ -196,8 +212,7 @@ let peek_line ~k decoder =
     let str = Bytes.sub_string buffer off len in
     match Angstrom.parse_string ~consume:All BNF.message str with
     | Ok v -> k v decoder
-    | Error err ->
-      Fmt.epr ">>> %S.\n%!" err ;
+    | Error _ ->
       let line = String.sub str 0 (String.length str - 2) in
       decoder.pos <- decoder.pos + len ;
       leave_with decoder (`Invalid_line line) in

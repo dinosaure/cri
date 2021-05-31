@@ -19,5 +19,26 @@ let test02 =
   | Cri.Decoder.Done _ -> Alcotest.failf "Unexpected message"
   | _ -> Alcotest.failf "Invalid state of decoding"
 
+let test03 =
+  Alcotest.test_case "ipv6" `Quick @@ fun () ->
+  let line = ":d_bot!~d_bot@2001:4802:7800:1:be76:4eff:fe20:3027 PRIVMSG #ocaml :<Ulugbek> Hi\r\n" in
+  let dec = Cri.Decoder.decoder_from line in
+  match Cri.Protocol.decode dec Cri.Protocol.any with
+  | Cri.Decoder.Done (Some _prefix, Cri.Protocol.Message (Privmsg, ([ Cri.Destination.Channel ch ], msg))) ->
+    Alcotest.(check channel) "channel" ch (Cri.Channel.of_string_exn "#ocaml") ;
+    Alcotest.(check string) "message" msg "<Ulugbek> Hi"
+  | Cri.Decoder.Done _ -> Alcotest.failf "Unexpected message"
+  | _ -> Alcotest.failf "Invalid state of decoding"
+
+let test04 =
+  Alcotest.test_case "join" `Quick @@ fun () ->
+  let line = ":habnabit_!~habnabit@python/site-packages/habnabit JOIN #ocaml\r\n" in
+  let dec = Cri.Decoder.decoder_from line in
+  match Cri.Protocol.decode dec Cri.Protocol.any with
+  | Cri.Decoder.Done (Some _prefix, Cri.Protocol.Message (Join, [ ch, _ ])) ->
+    Alcotest.(check channel) "channel" ch (Cri.Channel.of_string_exn "#ocaml")
+  | Cri.Decoder.Done _ -> Alcotest.failf "Unexpected message"
+  | _ -> Alcotest.failf "Invalid state of decoding"
+
 let () =
-        Alcotest.run "cri" [ "BNF", [ test01; test02 ] ]
+  Alcotest.run "cri" [ "BNF", [ test01; test02; test03; test04 ] ]

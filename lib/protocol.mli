@@ -33,11 +33,15 @@ type names =
   ; kind : [ `Secret | `Private | `Public ]
   ; names : ([ `Operator | `Voice | `None ] * Nickname.t) list }
 
+type host =
+  [ `Host of [ `raw ] Domain_name.t
+  | `Ip6 of Ipaddr.V6.t ]
+
 type prefix =
-  | Server of [ `raw ] Domain_name.t
+  | Server of host
   | User of { name : Nickname.t
             ; user : string option
-            ; host : [ `raw ] Domain_name.t option }
+            ; host : host option }
 
 type 'a t =
   | Pass : string t

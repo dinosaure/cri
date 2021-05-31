@@ -19,14 +19,18 @@ val decoder : unit -> decoder
 val decoder_from : string -> decoder
 val io_buffer_size : int
 
+type host =
+  [ `Host of string
+  | `Ip6 of Ipaddr.V6.t ]
+
 type t =
-   [ `User of (string * string option * string option) | `Server of string ] option
+   [ `User of (string * string option * host option) | `Server of host ] option
   * string * (string list * string option)
 
 module BNF : sig
   val name : string Angstrom.t
-  val host : string Angstrom.t
-  val servername : string Angstrom.t
+  val host : [ `Host of string | `Ip6 of Ipaddr.V6.t ] Angstrom.t
+  val servername : [ `Host of string | `Ip6 of Ipaddr.V6.t ] Angstrom.t
   val user : string Angstrom.t
 end
 

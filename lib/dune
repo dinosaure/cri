@@ -1,4 +1,13 @@
 (library
  (name cri)
  (public_name cri)
- (libraries ke rresult ptime hxd.string hxd.core domain-name fmt angstrom))
+ (libraries
+  ipaddr
+  ke
+  rresult
+  ptime
+  hxd.string
+  hxd.core
+  domain-name
+  fmt
+  angstrom))

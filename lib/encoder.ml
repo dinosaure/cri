@@ -53,12 +53,20 @@ let blit ~buf ~off ~len encoder =
     if len < l then leave_with encoder `No_enough_space in
   go 0 len encoder
 
+type host =
+  [ `Host of string
+  | `Ip6 of Ipaddr.V6.t ]
+
 type t =
-    [ `User of (string * string option * string option) | `Server of string ] option
+    [ `User of (string * string option * host option) | `Server of host ] option
   * string * (string list * string option)
 
 let write_crlf encoder = write "\r\n" encoder
 let write_space encoder = write " " encoder
+
+let write_host host encoder = match host with
+  | `Host v -> write v encoder
+  | `Ip6 v -> write (Ipaddr.V6.to_string v) encoder
 
 let write_prefix prefix encoder = match prefix with
   | `User (name, None, None) ->
@@ -77,17 +85,17 @@ let write_prefix prefix encoder = match prefix with
     write "!" encoder ;
     write user encoder ;
     write "@" encoder ;
-    write host encoder ;
+    write_host host encoder ;
     write_space encoder
   | `User (name, None, Some host) ->
     write ":" encoder ;
     write name encoder ;
     write "@" encoder ;
-    write host encoder ;
+    write_host host encoder ;
     write_space encoder
   | `Server servername ->
     write ":" encoder ;
-    write servername encoder ;
+    write_host servername encoder ;
     write_space encoder
 
 let encode_line encoder = function

@@ -35,11 +35,15 @@ type names =
   ; kind : [ `Secret | `Private | `Public ]
   ; names : ([ `Operator | `Voice | `None ] * Nickname.t) list }
 
+type host =
+  [ `Host of [ `raw ] Domain_name.t
+  | `Ip6 of Ipaddr.V6.t ]
+
 type prefix =
-  | Server of [ `raw ] Domain_name.t
+  | Server of host
   | User of { name : Nickname.t
             ; user : string option
-            ; host : [ `raw ] Domain_name.t option }
+            ; host : host option }
 
 module Fun = struct
   type ('k, 'res) args =
@@ -128,8 +132,14 @@ type 'a recv =
   | Any : message recv
 
 let to_prefix : prefix option -> _ = function
-  | Some (User { name; user; host; }) -> Some (`User (Nickname.to_string name, user, Option.map Domain_name.to_string host))
-  | Some (Server v) -> Some (`Server (Domain_name.to_string v))
+  | Some (User { name; user; host= Some (`Host host); }) ->
+    Some (`User (Nickname.to_string name, user, Some (`Host (Domain_name.to_string host))))
+  | Some (User { name; user; host= Some (`Ip6 host); }) ->
+    Some (`User (Nickname.to_string name, user, Some (`Ip6 host)))
+  | Some (User { name; user; host= None; }) ->
+    Some (`User (Nickname.to_string name, user, None))
+  | Some (Server (`Host v)) -> Some (`Server (`Host (Domain_name.to_string v)))
+  | Some (Server (`Ip6 v)) -> Some (`Server (`Ip6 v))
   | None -> None
 
 let of_prettier pp = function
@@ -311,13 +321,18 @@ let rec of_line
   = fun w ((prefix, command, vs) as line) ->
   let prefix : prefix option = match prefix with
     | None -> None
-    | Some (`Server servername) ->
-      let servername = Domain_name.of_string_exn servername in
-      Some (Server servername)
-    | Some (`User (name, user, host)) ->
+    | Some (`Server (`Ip6 v)) -> Some (Server (`Ip6 v))
+    | Some (`Server (`Host v)) -> Some (Server (`Host (Domain_name.of_string_exn v)))
+    | Some (`User (name, user, Some (`Ip6 v))) ->
       let name = Nickname.of_string_exn name in
-      let host = Option.map Domain_name.of_string_exn host in
-      Some (User { name; user; host; }) in
+      Some (User { name; user; host= Some (`Ip6 v); })
+    | Some (`User (name, user, Some (`Host host))) ->
+      let name = Nickname.of_string_exn name in
+      let host = Domain_name.of_string_exn host in
+      Some (User { name; user; host= Some (`Host host); })
+    | Some (`User (name, user, None)) ->
+      let name = Nickname.of_string_exn name in
+      Some (User { name; user; host= None; }) in
   match w, String.lowercase_ascii command, vs with
   | Recv Pass, "pass", ([ pass ], _) -> Ok (prefix, pass)
   | Recv Nick, "nick", ([ nick ], _) ->
@@ -449,7 +464,7 @@ let rec of_line
   | _ -> Error `Invalid_command
 
 let prefix ?user ?host name : prefix =
-  User { name; user; host; }
+  User { name; user; host= Option.map (fun v -> `Host v) host; }
 
 let send : type a. a t -> a -> send
   = fun w v -> Send (w, v)
