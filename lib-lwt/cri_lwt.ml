@@ -59,6 +59,7 @@ and go ~stop ~push dec ke flow = function
       | Ok `Eof ->
         push None ; Lwt.return_error `End_of_input
       | Ok (`Data cs) ->
+        Log.debug (fun m -> m "<~ @[<hov>%a@]" (Hxd_string.pp Hxd.default) (Cstruct.to_string cs)) ;
         Ke.Rke.N.push ke ~blit:blit0 ~length:Cstruct.length ~off:0 ~len:(Cstruct.length cs) cs ;
         go ~stop ~push dec ke flow state )
     | _ ->
@@ -91,6 +92,7 @@ and go ~next allocator enc flow = function
       Lwt.return_ok () )
   | Encoder.Write { buffer; off; len; continue; } ->
     let cs = Cstruct.of_string ~allocator ~off ~len buffer in
+    Log.debug (fun m -> m "~> @[<hov>%a@]" (Hxd_string.pp Hxd.default) (Cstruct.to_string cs)) ;
     ( Mimic.write flow cs >>= function
     | Ok () -> go ~next allocator enc flow (continue len)
     | Error err -> Lwt.return_error (`Write err) )
