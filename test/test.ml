@@ -40,5 +40,13 @@ let test04 =
   | Cri.Decoder.Done _ -> Alcotest.failf "Unexpected message"
   | _ -> Alcotest.failf "Invalid state of decoding"
 
+let test05 =
+  Alcotest.test_case "quit" `Quick @@ fun () ->
+  let line = ":_whitelogger!~whitelogg@uruz.whitequark.org QUIT :Remote host closed the connection\r\n" in
+  let dec = Cri.Decoder.decoder_from line in
+  match Cri.Protocol.decode dec Cri.Protocol.Any with
+  | Cri.Decoder.Done _ -> ()
+  | _ -> Alcotest.failf "Invalid state of decoding"
+
 let () =
-  Alcotest.run "cri" [ "BNF", [ test01; test02; test03; test04 ] ]
+        Alcotest.run "cri" [ "BNF", [ test01; test02; test03; test04; test05 ] ]

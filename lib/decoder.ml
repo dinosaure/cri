@@ -123,7 +123,7 @@ module BNF = struct
     | _ -> false
 
   let is_special = function
-    | '-' | '[' | ']' | '\\' | '`' | '^' | '{' | '}' | '_' -> true
+    | '-' | '[' | ']' | '\\' | '`' | '^' | '{' | '}' (* TODO *) | '_' -> true
     | _ -> false
 
   let is_space = (=) ' '
@@ -137,7 +137,7 @@ module BNF = struct
   let ( || ) f g = fun chr -> f chr || g chr
 
   let nick =
-    satisfy is_letter >>= fun chr ->
+    satisfy (is_letter || (* TODO *) ((=) '_')) >>= fun chr ->
     take_while (is_letter || is_number || is_special) >>= fun str ->
     return (String.make 1 chr ^ str)
 
