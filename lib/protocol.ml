@@ -339,6 +339,9 @@ let rec of_line
     ( match Nickname.of_string nick with
     | Ok nick -> Ok (prefix, { nick; hopcount= None; })
     | Error _ -> Error `Invalid_parameters )
+  | Recv Nick, "nick", ([], Some nick) ->
+    ( try Ok (prefix, { nick= Nickname.of_string_exn nick; hopcount= None })
+      with _ -> Error `Invalid_parameters )
   | Recv Nick, "nick", ([ nick; hopcount; ], _) ->
     ( try Ok (prefix, { nick= Nickname.of_string_exn nick; hopcount= Some (int_of_string hopcount) })
       with _ -> Error `Invalid_parameters )
