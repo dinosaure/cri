@@ -1,5 +1,0 @@
-(library
- (name cri_irmin)
- (public_name cri.irmin)
- (libraries cri irmin)
- (preprocess (pps ppx_irmin)))

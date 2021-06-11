@@ -25,8 +25,7 @@ let hostname = Domain_name.of_string_exn (Unix.gethostname ())
 
 let user =
   { Cri.Protocol.username= "mirage.noisy.bot"
-  ; Cri.Protocol.hostname
-  ; Cri.Protocol.servername= Domain_name.of_string_exn "*"
+  ; Cri.Protocol.mode= 0
   ; Cri.Protocol.realname= "A mirage noisy bot - https://github.com/dinosaure/cri" }
 
 let noisy_bot = Cri.Nickname.of_string_exn "noisy-bot"

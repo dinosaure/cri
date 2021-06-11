@@ -1,8 +1,7 @@
 type nick = { nick : Nickname.t; hopcount : int option; }
 
 type user = { username : string
-            ; hostname : [ `raw ] Domain_name.t
-            ; servername : [ `raw ] Domain_name.t
+            ; mode : int
             ; realname : string }
 
 type server = { servername : [ `raw ] Domain_name.t

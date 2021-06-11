@@ -3,8 +3,7 @@
 type nick = { nick : Nickname.t; hopcount : int option; }
 
 type user = { username : string
-            ; hostname : [ `raw ] Domain_name.t
-            ; servername : [ `raw ] Domain_name.t
+            ; mode : int
             ; realname : string }
 
 type server = { servername : [ `raw ] Domain_name.t
@@ -43,12 +42,9 @@ let pp_nick ppf { nick; hopcount; } = match hopcount with
   | Some hopcount -> Fmt.pf ppf "%a (hopcount: %d)" Nickname.pp nick hopcount
   | None -> Nickname.pp ppf nick
 
-let pp_user ppf { username; hostname; servername; realname; } =
-  Fmt.pf ppf "%s%%%a@%a (%s)"
-    username
-    Domain_name.pp hostname
-    Domain_name.pp servername
-    realname
+let pp_user ppf { username; mode; realname; } =
+  Fmt.pf ppf "%s %d (%s)"
+    username mode realname
 
 let pp_server ppf { servername; hopcount; info; } =
   Fmt.pf ppf "%a:%d (%s)" Domain_name.pp servername hopcount info
@@ -253,10 +249,8 @@ let to_line
       to_prefix prefix, "nick", ([ Nickname.to_string nick ], None)
     | Nick, { nick; hopcount= Some hopcount; } ->
       to_prefix prefix, "nick", ([ Nickname.to_string nick; string_of_int hopcount ], None)
-    | User, { username; hostname; servername; realname; } ->
-      let hostname = Domain_name.to_string hostname in
-      let servername = Domain_name.to_string servername in
-      to_prefix prefix, "user", ([ username; hostname; servername; ], Some realname)
+    | User, { username; mode; realname; } ->
+      to_prefix prefix, "user", ([ username; string_of_int mode; "*"; ], Some realname)
     | Server, { servername; hopcount; info; } ->
       let servername = Domain_name.to_string servername in
       to_prefix prefix, "server", ([ servername; string_of_int hopcount; ], Some info)
@@ -434,11 +428,10 @@ let rec of_line
   | Recv Nick, "nick", ([ nick; hopcount; ], _) ->
     ( try Ok (prefix, { nick= Nickname.of_string_exn nick; hopcount= Some (int_of_string hopcount) })
       with _ -> Error `Invalid_parameters )
-  | Recv User, "user", ([ username; hostname; servername; ], realname) ->
+  | Recv User, "user", ([ username; mode; _; ], realname) ->
     let realname = Option.value ~default:"" realname in
-    ( try let hostname = Domain_name.of_string_exn hostname in
-          let servername = Domain_name.of_string_exn servername in
-          Ok (prefix, { username; hostname; servername; realname; })
+    ( try let mode = int_of_string mode in
+          Ok (prefix, { username; mode; realname; })
       with _ -> Error `Invalid_parameters )
   | Recv Server, "server", ([ servername; hopcount; ], Some info) ->
     ( try let servername = Domain_name.of_string_exn servername in

@@ -186,9 +186,9 @@ let ssh_auth =
   let doc = Key.Arg.info ~doc:"SSH public key of the remote Git endpoint." [ "ssh-auth" ] in
   Key.(create "ssh_auth" Arg.(opt (some string) None doc))
 
-let author =
-  let doc = Key.Arg.info ~doc:"Author of commits." [ "author" ] in
-  Key.(create "author" Arg.(opt string "<noisy-bot@mirage.io>" doc))
+let hostname =
+  let doc = Key.Arg.info ~doc:"Hostname of the bot." [ "hostname" ] in
+  Key.(create "hostname" Arg.(required string doc))
 
 let nickname =
   let doc = Key.Arg.info ~doc:"Nickname of the bot." [ "nickname" ] in
@@ -212,7 +212,7 @@ let irc =
 
 let logger =
   foreign "Unikernel.Make"
-    ~keys:[ Key.abstract author
+    ~keys:[ Key.abstract hostname
           ; Key.abstract nickname
           ; Key.abstract channel 
           ; Key.abstract tick

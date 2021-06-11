@@ -1,19 +1,35 @@
 opam-version: "2.0"
-name:         "cri"
-maintainer:   "Romain Calascibetta <romain.calascibetta@gmail.com>"
-authors:      "Romain Calascibetta <romain.calascibetta@gmail.com>"
-homepage:     "https://github.com/dinosaure/cri"
-bug-reports:  "https://github.com/dinosaure/cri/issues"
-dev-repo:     "git+https://github.com/dinosaure/cri.git"
-doc:          "https://dinosaure.github.io/cri/"
-license:      "MIT"
-synopsis:     "Implementation of IRC in OCaml"
-description: """Cri is a simple implementation of IRC in OCaml."""
-
-build: [ "dune" "build" "-p" name "-j" jobs ]
-run-test: [ "dune" "runtest" "-p" name "-j" jobs ]
-
+name: "cri"
+synopsis: "Implementation of IRC in OCaml"
+description: "Cri is a simple implementation of IRC in OCaml."
+maintainer: "Romain Calascibetta <romain.calascibetta@gmail.com>"
+authors: "Romain Calascibetta <romain.calascibetta@gmail.com>"
+license: "MIT"
+homepage: "https://github.com/dinosaure/cri"
+doc: "https://dinosaure.github.io/cri/"
+bug-reports: "https://github.com/dinosaure/cri/issues"
 depends: [
-  "ocaml"       {>= "4.07.0"}
-  "dune"        {>= "2.8.0"}
+  "ocaml" {>= "4.07.0"}
+  "dune" {>= "2.8.0"}
+  "angstrom" {>= "0.15.0"}
+  "dns-client" {>= "5.0.1"}
+  "domain-name" {>= "0.3.0"}
+  "fmt" {>= "0.8.9"}
+  "hxd" {>= "0.3.1"}
+  "ipaddr" {>= "5.0.1"}
+  "ke" {>= "0.4"}
+  "logs" {>= "0.7.0"}
+  "mimic" {>= "0.0.3"}
+  "mirage-clock" {>= "3.1.0"}
+  "mirage-random" {>= "2.0.0"}
+  "mirage-stack" {>= "2.2.0"}
+  "mirage-time" {>= "2.0.1"}
+  "ptime" {>= "0.8.5"}
+  "rresult" {>= "0.6.0"}
+  "tls-mirage" {>= "0.13.1"}
+  "uri" {>= "4.2.0"}
+  "alcotest" {>= "1.4.0" & with-test}
 ]
+build: ["dune" "build" "-p" name "-j" jobs]
+run-test: ["dune" "runtest" "-p" name "-j" jobs]
+dev-repo: "git+https://github.com/dinosaure/cri.git"

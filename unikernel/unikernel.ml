@@ -37,13 +37,12 @@ module Make
     let d, ps = Pclock.now_d_ps () in
     let ptime = Ptime.v (d, ps) in
     Irmin.Info.v ~date:(Int64.of_int d)
-      ~author:(Key_gen.author ())
+      ~author:(Key_gen.nickname ())
       (Fmt.str "log %a" Ptime.pp ptime)
 
   let config () =
     { user= { Cri.Protocol.username= "noisy-bot"
-            ; hostname= Domain_name.of_string_exn "mirage.io"
-            ; servername= Domain_name.of_string_exn "mirage.io"
+            ; mode= 0
             ; realname= "MirageOS noisy bot" }
     ; channel= Cri.Channel.of_string_exn (Key_gen.channel ())
     ; nickname= Cri.Nickname.of_string_exn (Key_gen.nickname ())
@@ -68,8 +67,8 @@ module Make
         | Ok _ -> Lwt.return_unit
         | Error _ -> Lwt_switch.turn_off errored
 
-  let log ctx_irc ctx_git uri =
-    let { user; channel; nickname; tick; } = config () in
+  let log config ctx_irc ctx_git uri =
+    let { user; channel; nickname; tick; } = config in
     let stop = Lwt_switch.create () in
     let errored = Lwt_switch.create () in
     let error, wk = Lwt.wait () in
@@ -88,8 +87,9 @@ module Make
     | Error _, _ | _, Error _ -> Lwt.return `Retry
 
   let start () () _stack ctx_irc ctx_git =
+    let config = config () in
     let ctx_irc = Mimic.merge ctx_irc (Cri_mirage.ctx_of_uri (Uri.of_string (Key_gen.irc ()))) in
-    let rec infinite () = log ctx_irc ctx_git (Key_gen.remote ()) >>= function
+    let rec infinite () = log config ctx_irc ctx_git (Key_gen.remote ()) >>= function
       | `Retry -> infinite ()
       | `Stop -> Lwt.return_unit in
     infinite ()
