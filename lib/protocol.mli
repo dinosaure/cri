@@ -11,7 +11,7 @@ type server = { servername : [ `raw ] Domain_name.t
 
 type oper = { user : string; password : string; }
 
-type notice = { nickname : string; msg : string; }
+type notice = { dsts : Destination.t list; msg : string; }
 
 type 'a prettier =
   [ `Pretty of 'a | `String of string | `None ]
@@ -57,6 +57,8 @@ type 'a t =
   | Privmsg : (Destination.t list * string) t
   | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
+  | Part : (Channel.t list * string option) t
+  | Topic : (Channel.t * string option) t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -76,17 +78,36 @@ type 'a t =
   | RPL_ENDOFNAMES : Channel.t t 
   | RPL : reply t
 
+val pp_nick : nick Fmt.t
+val pp_user : user Fmt.t
+val pp_server : server Fmt.t
+val pp_oper : oper Fmt.t
+val pp_notice : notice Fmt.t
+val pp_prettier : 'a Fmt.t -> 'a prettier Fmt.t
+val pp_welcome : welcome Fmt.t
+val pp_discover : discover Fmt.t
+val pp_reply : reply Fmt.t
+val pp_mode : mode Fmt.t
+val pp_names : names Fmt.t
+val pp_host : host Fmt.t
+
+val pp_prefix : prefix Fmt.t
+
 type command = Command : 'a t -> command
 type message = Message : 'a t * 'a -> message
 type send = Send : 'a t * 'a -> send
 type 'a recv =
-  | Recv : 'a t -> 'a recv
-  | Any : message recv
+  | Recv : 'a t -> (prefix option * 'a) recv
+  | Any : (prefix option * message) recv
+  | Many : (prefix option * message) list recv
+
+val pp_message : message Fmt.t
 
 val prefix : ?user:string -> ?host:[ `raw ] Domain_name.t -> Nickname.t -> prefix
 val send : 'a t -> 'a -> send
-val recv : 'a t -> 'a recv
-val any : message recv
+val recv : 'a t -> (prefix option * 'a) recv
+val any : (prefix option * message) recv
+val many : (prefix option * message) list recv
 
 val encode : ?prefix:prefix -> Encoder.encoder -> send -> [> Encoder.error ] Encoder.state
 
@@ -98,4 +119,4 @@ type error =
 
 val pp_error : error Fmt.t
 
-val decode : Decoder.decoder -> 'a recv -> (prefix option * 'a, error) Decoder.state
+val decode : Decoder.decoder -> 'a recv -> ('a, error) Decoder.state

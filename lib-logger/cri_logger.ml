@@ -11,12 +11,12 @@ end
 
 type state =
   { step : step Atomic.t
-  ; queue : Cri.Protocol.message Queue.t
+  ; queue : (Cri.Protocol.prefix option * Cri.Protocol.message) Queue.t
   ; user : Cri.Protocol.user
   ; channel : Cri.Channel.t
   ; nickname : Cri.Nickname.t
   ; mutex : Lwt_mutex.t
-  ; log : Cri.Protocol.message list -> unit Lwt.t
+  ; log : (Cri.Protocol.prefix option * Cri.Protocol.message) list -> unit Lwt.t
   ; tick : int64 }
 and step =
   | Connected
@@ -121,9 +121,9 @@ let rec reader state recv ({ Cri_lwt.send } as ssend) =
     Log.debug (fun m -> m "Ping -> Pong") ;
     send Cri.Protocol.Pong v ;
     reader state recv ssend
-  | Some (_, msg), Log ->
+  | Some (prefix, msg), Log ->
     Lwt_mutex.with_lock state.mutex @@ begin fun () ->
-    Queue.push msg state.queue ; Lwt.return_unit end >>= fun () ->
+    Queue.push (prefix, msg) state.queue ; Lwt.return_unit end >>= fun () ->
     reader state recv ssend
   | Some _, _ -> reader state recv ssend
 

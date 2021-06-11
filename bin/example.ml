@@ -83,18 +83,16 @@ let sleep_ns = Lwt_unix.sleep <.> ( *. ) 1e-9 <.> Int64.to_float
 
 let log _msgs = Lwt.return_unit
 
+let timeout () = sleep_ns 256_000_000_000L
+
 let run ctx =
   let open Lwt.Infix in
   let stop = Lwt_switch.create () in
   let state = Cri_logger.state ~user ~channel:ocaml ~nickname:noisy_bot
     ~tick:1_000_000_000L log in
-  let `Fiber th, recv, send, close = Cri_lwt.run ~stop ~ctx in
+  let `Fiber th, recv, send, close = Cri_lwt.run ~timeout ~stop ~ctx in
   Lwt.both
-    (th >>= function
-     | Ok _ as res -> Lwt.return res
-     | Error _ as res ->
-       Lwt_switch.turn_off stop >|= close >>= fun () ->
-       Lwt.return res)
+    (th >>= fun res -> Lwt_switch.turn_off stop >|= close >>= fun () -> Lwt.return res)
     (Cri_logger.handler ~sleep_ns ~stop state recv send close) >>= function
   | Ok (), Ok () -> Lwt.return_unit
   | Error err, Ok () ->

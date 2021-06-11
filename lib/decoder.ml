@@ -30,15 +30,15 @@ let leave_with (decoder : decoder) error =
   raise (Leave { error; buffer= decoder.buffer; committed= decoder.pos; max= decoder.max; })
 
 type ('v, 'err) state =
-  | Done of 'v
+  | Done of int * 'v
   | Read of { buffer : Bytes.t
             ; off : int; len : int
             ; continue : int -> ('v, 'err) state }
   | Error of 'err info
 
-let return v = Done v
+let return decoder v = Done (decoder.pos, v)
 
-let at_least_one_line decoder =
+let at_least_one_line (decoder : decoder) =
   let pos = ref decoder.pos in
   let chr = ref '\000' in
   let has_cr = ref false in
@@ -66,7 +66,10 @@ let rec prompt
 and go ~k decoder off =
   if off = Bytes.length decoder.buffer
      && not (at_least_one_line { decoder with max= off })
-  then assert false (* TODO *)
+  then
+    ( Fmt.epr ">>> @[<hov>%a@]\n%!" (Hxd_string.pp Hxd.default)
+        (Bytes.sub_string decoder.buffer decoder.pos (off - decoder.pos))
+    ; assert false )
   else if not (at_least_one_line { decoder with max = off })
   then Read { buffer= decoder.buffer; off; len= Bytes.length decoder.buffer - off;
               continue= (fun len -> go ~k decoder (off + len)); }
@@ -104,7 +107,7 @@ module BNF = struct
     take_while1 is_digit >>= fun x ->
     count 7 (char ':' *> take_while1 is_digit) >>= fun r ->
     let ipv6 = String.concat ":" (x :: r) in
-    try Fmt.epr ">>> %S.\n%!" ipv6 ; return (Ipaddr.V6.of_string_exn ipv6)
+    try return (Ipaddr.V6.of_string_exn ipv6)
     with _ -> fail "ip6addr"
 
   let host = name >>= fun x -> many (char '.' *> name) >>= fun r -> return (x :: r)
@@ -222,14 +225,14 @@ let leave_with (decoder : decoder) error =
   Error { error; buffer= decoder.buffer; committed= decoder.pos; max= decoder.max; }
 
 let rec bind x f = match x with
-  | Done v -> f v
+  | Done (_, v) -> f v
   | Read { buffer; off; len; continue; } ->
     let continue len = bind (continue len) f in
     Read { buffer; off; len; continue; }
   | Error err -> Error err
 
 let rec reword_error f = function
-  | Done v -> Done v
+  | Done (committed, v) -> Done (committed, v)
   | Read { buffer; off; len; continue; } ->
     let continue len = reword_error f (continue len) in
     Read { buffer; off; len; continue; }

@@ -1,0 +1,4 @@
+(library
+ (name cri_mirage)
+ (public_name cri.mirage)
+ (libraries rresult uri mimic tls-mirage mirage-stack mirage-random mirage-clock mirage-time dns-client.mirage))

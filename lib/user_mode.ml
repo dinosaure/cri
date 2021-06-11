@@ -23,6 +23,14 @@ type modes =
   { add : t list
   ; rem : t list }
 
+let pp ppf { add; rem; } = match add, rem with
+  | [], [] -> ()
+  | [], _ :: _ -> Fmt.pf ppf "-%a" Fmt.(list ~sep:nop (using to_letter char)) rem
+  | _ :: _, [] -> Fmt.pf ppf "+%a" Fmt.(list ~sep:nop (using to_letter char)) add
+  | _ -> Fmt.pf ppf "+%a-%a"
+    Fmt.(list ~sep:nop (using to_letter char)) add
+    Fmt.(list ~sep:nop (using to_letter char)) rem
+
 let of_string ?(ignore= true) str =
   let add v lst = if List.exists ((=) v) lst then lst else v :: lst in
   let rec go ~neg acc idx =

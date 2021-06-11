@@ -7,7 +7,7 @@ type 'err info = { error : 'err; buffer : bytes; committed : int; max : int; }
 val pp_error_with_info : pp:'err Fmt.t -> 'err info Fmt.t
 
 type ('v, 'err) state =
-  | Done of 'v
+  | Done of int * 'v
   | Read of { buffer : Bytes.t
             ; off : int; len : int
             ; continue : int -> ('v, 'err) state }
@@ -34,6 +34,8 @@ module BNF : sig
   val user : string Angstrom.t
 end
 
+val at_least_one_line : decoder -> bool
+
 val junk_eol : decoder -> unit
 
 val peek_line :
@@ -42,6 +44,6 @@ val peek_line :
 
 val leave_with : decoder -> 'err -> (_, 'err) state
 
-val return : 'a -> ('a, _) state
+val return : decoder -> 'a -> ('a, _) state
 val bind : ('a, 'err) state -> ('a -> ('b, 'err) state) -> ('b, 'err) state
 val reword_error : ('err0 -> 'err1) -> ('a, 'err0) state -> ('a, 'err1) state

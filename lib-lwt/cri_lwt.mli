@@ -31,6 +31,7 @@ type error =
   [ `End_of_input        
   | `Decoder of Cri.Protocol.error Cri.Decoder.info
   | `Write of Mimic.write_error
+  | `Time_out
   | Cri.Encoder.error
   | Mimic.error ]
 
@@ -42,6 +43,7 @@ type close = unit -> unit
 
 val run :
      ?stop:Lwt_switch.t
+  -> ?timeout:(unit -> unit Lwt.t)
   -> ctx:Mimic.ctx
   -> [ `Fiber of (unit, error) result Lwt.t ]
      * recv * send * close

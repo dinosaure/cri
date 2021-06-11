@@ -13,7 +13,7 @@ type server = { servername : [ `raw ] Domain_name.t
 
 type oper = { user : string; password : string; }
 
-type notice = { nickname : string; msg : string; }
+type notice = { dsts : Destination.t list; msg : string; }
 
 type 'a prettier =
   [ `Pretty of 'a | `String of string | `None ]
@@ -39,11 +39,73 @@ type host =
   [ `Host of [ `raw ] Domain_name.t
   | `Ip6 of Ipaddr.V6.t ]
 
+let pp_nick ppf { nick; hopcount; } = match hopcount with
+  | Some hopcount -> Fmt.pf ppf "%a (hopcount: %d)" Nickname.pp nick hopcount
+  | None -> Nickname.pp ppf nick
+
+let pp_user ppf { username; hostname; servername; realname; } =
+  Fmt.pf ppf "%s%%%a@%a (%s)"
+    username
+    Domain_name.pp hostname
+    Domain_name.pp servername
+    realname
+
+let pp_server ppf { servername; hopcount; info; } =
+  Fmt.pf ppf "%a:%d (%s)" Domain_name.pp servername hopcount info
+
+let pp_oper ppf { user; password= _; } =
+  Fmt.pf ppf "%s" user
+
+let pp_notice ppf { dsts; msg; } =
+  Fmt.pf ppf "%a: %s" Fmt.(Dump.list Destination.pp) dsts msg
+
+let pp_prettier pp ppf = function
+  | `Pretty v -> pp ppf v
+  | `String v -> Fmt.string ppf v
+  | `None -> ()
+
+let pp_welcome ppf { nick; user; host; } =
+  Fmt.pf ppf "%s!%s@%a" nick user Domain_name.pp host
+
+let pp_discover ppf { users; services; servers; } =
+  Fmt.pf ppf "users:%d, services: %d, servers:%d" users services servers
+
+let pp_reply ppf { numeric; params= ps, r; } = match ps, r with
+  | _ :: _, Some r -> Fmt.pf ppf "%03d %a :%s" numeric Fmt.(list ~sep:(always "@ ") string) ps r
+  | _ :: _, None -> Fmt.pf ppf "%03d %a" numeric Fmt.(list ~sep:(always "@ ") string) ps
+  | [], Some r -> Fmt.pf ppf "%03d :%s" numeric r
+  | [], None -> Fmt.pf ppf "%03d" numeric
+
+let pp_mode ppf { nickname; modes; } =
+  Fmt.pf ppf "%a %a" Nickname.pp nickname User_mode.pp modes
+
+let pp_names ppf { channel; kind; names; } =
+  let pp_name ppf (k, nickname) = match k with
+    | `Operator -> Fmt.pf ppf "@%a" Nickname.pp nickname
+    | `Voice -> Fmt.pf ppf "+%a" Nickname.pp nickname
+    | `None -> Nickname.pp ppf nickname in
+  match kind with
+  | `Secret -> Fmt.pf ppf "@%a %a" Channel.pp channel Fmt.(Dump.list pp_name) names
+  | `Private -> Fmt.pf ppf "*%a %a" Channel.pp channel Fmt.(Dump.list pp_name) names
+  | `Public -> Fmt.pf ppf "=%a %a" Channel.pp channel Fmt.(Dump.list pp_name) names
+
+let pp_host ppf = function
+  | `Host v -> Domain_name.pp ppf v
+  | `Ip6 v -> Ipaddr.V6.pp ppf v
+
 type prefix =
   | Server of host
   | User of { name : Nickname.t
             ; user : string option
             ; host : host option }
+
+let pp_prefix ppf (prefix : prefix) = match prefix with
+  | Server host -> pp_host ppf host
+  | User { name; user; host; } ->
+    Fmt.pf ppf "%a%a%a"
+      Nickname.pp name
+      Fmt.(option (prefix (const string "!") string)) user
+      Fmt.(option (prefix (const string "@") pp_host)) host
 
 module Fun = struct
   type ('k, 'res) args =
@@ -69,6 +131,8 @@ type 'a t =
   | Privmsg : (Destination.t list * string) t
   | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
+  | Part : (Channel.t list * string option) t
+  | Topic : (Channel.t * string option) t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -105,6 +169,8 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
   | "privmsg" -> Ok (Command Privmsg)
   | "ping" -> Ok (Command Ping)
   | "pong" -> Ok (Command Pong)
+  | "part" -> Ok (Command Part)
+  | "topic" -> Ok (Command Topic)
   | "001" -> Ok (Command RPL_WELCOME)
   | "002" -> Ok (Command RPL_YOURHOST)
   | "003" -> Ok (Command RPL_CREATED)
@@ -128,8 +194,9 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
 type send = Send : 'a t * 'a -> send
 
 type 'a recv =
-  | Recv : 'a t -> 'a recv
-  | Any : message recv
+  | Recv : 'a t -> (prefix option * 'a) recv
+  | Any : (prefix option * message) recv
+  | Many : (prefix option * message) list recv
 
 let to_prefix : prefix option -> _ = function
   | Some (User { name; user; host= Some (`Host host); }) ->
@@ -200,8 +267,10 @@ let to_line
     | SQuit, (server, msg) ->
       let server = Domain_name.to_string server in
       to_prefix prefix, "squit", ([ server ], Some msg)
-    | Notice, { nickname; msg; } ->
-      to_prefix prefix, "notice", ([ nickname ], Some msg)
+    | Notice, { dsts; msg; } ->
+      let dsts = List.map Destination.to_string dsts in
+      let dsts = String.concat "," dsts in
+      to_prefix prefix, "notice", ([ dsts ], Some msg)
     | Join, channels ->
       let channels, keys = List.split channels in
       let keys, _ = List.partition Option.is_some keys in
@@ -230,6 +299,11 @@ let to_line
       | Some src, Some dst ->
         to_prefix prefix, "pong", ([ Domain_name.to_string src; Domain_name.to_string dst ], None)
       | None, None -> assert false (* TODO *) )
+    | Part, (channels, msg) ->
+      let channels = String.concat "," (List.map Channel.to_string channels) in
+      to_prefix prefix, "part", ([ channels ], msg)
+    | Topic, (channel, topic) ->
+      to_prefix prefix, "topic", ([ Channel.to_string channel ], topic)
     | RPL_WELCOME, v ->
       let param = match v with
         | `Pretty { nick; _ } -> [ nick ]
@@ -292,6 +366,21 @@ let to_line
     | RPL, { numeric; params; } ->
       to_prefix prefix, (Fmt.str "%03d" numeric), params
 
+let pp_message ppf (Message (t, v)) = match t with
+  | Pass -> Fmt.pf ppf "pass %s" v
+  | Nick -> Fmt.pf ppf "nick %a" pp_nick v
+  | User -> Fmt.pf ppf "user %a" pp_user v
+  | Server -> Fmt.pf ppf "server %a" pp_server v
+  | Oper -> Fmt.pf ppf "oper %a" pp_oper v
+  | Quit -> Fmt.pf ppf "quit %S" v
+  | SQuit -> Fmt.pf ppf "squit %a %S" Domain_name.pp (fst v) (snd v)
+  | Join -> Fmt.pf ppf "join %a" Fmt.(Dump.list (Dump.pair Channel.pp (option (fmt "%S")))) v
+  | _ ->
+    let _prefix, command, (ps, v) = to_line t v in
+    match v with
+    | Some v -> Fmt.pf ppf "%s %a :%s" command Fmt.(list ~sep:(always "@ ") string) ps v
+    | None -> Fmt.pf ppf "%s %a" command Fmt.(list ~sep:(always "@ ") string) ps
+
 let apply_keys channels keys =
   let rec go acc channels keys = match channels with
     | [] -> List.rev acc
@@ -317,7 +406,7 @@ and chop str = String.sub str 1 (String.length str - 1)
 let rec of_line
   : type a. a recv
          -> Decoder.t
-         -> (prefix option * a, [ `Invalid_parameters | `Invalid_command | `Invalid_reply ]) result
+         -> (a, [ `Invalid_parameters | `Invalid_command | `Invalid_reply ]) result
   = fun w ((prefix, command, vs) as line) ->
   let prefix : prefix option = match prefix with
     | None -> None
@@ -363,8 +452,11 @@ let rec of_line
     ( try let server = Domain_name.of_string_exn server in
           Ok (prefix, (server, msg))
       with _ -> Error `Invalid_parameters )
-  | Recv Notice, "notice", ([ nickname ], Some msg) ->
-    Ok (prefix, { nickname; msg; })
+  | Recv Notice, "notice", (dsts, Some msg) ->
+    ( try let dsts = String.concat "" dsts in
+          let dsts = Destination.of_string_exn dsts in
+          Ok (prefix, { dsts; msg; })
+      with _ -> Error `Invalid_parameters )
   | Recv Join, "join", ([ channels; keys; ], _) ->
     let channels = Astring.String.cuts ~sep:"," channels in
     let keys = Astring.String.cuts ~sep:"," keys in
@@ -422,6 +514,17 @@ let rec of_line
             Ok (prefix, (None, Some dst))
         with _ -> Error `Invalid_parameters )
     | _ -> Error `Invalid_parameters )
+  | Recv Part, "part", (channels, msg) ->
+    ( try
+        let channels = String.concat "" channels in
+        let channels = Astring.String.cuts ~sep:"," channels in
+        let channels = List.map Channel.of_string_exn channels in
+        Ok (prefix, (channels, msg))
+      with _ -> Error `Invalid_parameters )
+  | Recv Topic, "topic", ([ channel ], topic) ->
+    ( match Channel.of_string channel with
+    | Ok channel -> Ok (prefix, (channel, topic))
+    | Error _ -> Error `Invalid_parameters )
   | Recv RPL_WELCOME,       "001", params -> Ok (prefix, to_prettier RPL_WELCOME       params)
   | Recv RPL_YOURHOST,      "002", params -> Ok (prefix, to_prettier RPL_YOURHOST      params)
   | Recv RPL_CREATED,       "003", params -> Ok (prefix, to_prettier RPL_CREATED       params)
@@ -464,6 +567,8 @@ let rec of_line
     | Ok (Command c) -> match of_line (Recv c) line with
       | Ok (prefix, v) -> Ok (prefix, Message (c, v))
       | Error _ as err -> err )
+  | Many, _, _ -> failwith "Impossible to get many lines from [of_line]"
+    (* XXX(dinosaure): should never occur! *)
   | _ -> Error `Invalid_command
 
 let prefix ?user ?host name : prefix =
@@ -471,9 +576,10 @@ let prefix ?user ?host name : prefix =
 
 let send : type a. a t -> a -> send
   = fun w v -> Send (w, v)
-let recv : type a. a t -> a recv
+let recv : type a. a t -> (prefix option * a) recv
   = fun w -> Recv w
 let any = Any
+let many = Many
 
 let encode
   : ?prefix:prefix -> Encoder.encoder -> send -> [> Encoder.error ] Encoder.state
@@ -490,10 +596,22 @@ let pp_error ppf = function
   | #Decoder.error as err -> Decoder.pp_error ppf err
 
 let decode
-  : type a. Decoder.decoder -> a recv -> (prefix option * a, [> error ]) Decoder.state
-  = fun decoder w ->
+  : type a. Decoder.decoder -> a recv -> (a, [> error ]) Decoder.state
+  = fun decoder -> function
+  | Many ->
+    let rec k acc line decoder = match of_line Any line with
+      | Ok x ->
+        Decoder.junk_eol decoder ;
+        if Decoder.at_least_one_line decoder
+        then Decoder.peek_line ~k:(k (x :: acc)) decoder
+             |> Decoder.reword_error (fun err -> (err :> error))
+        else Decoder.return decoder (List.rev (x :: acc))
+      | Error err -> Decoder.leave_with decoder (err :> error) in
+    Decoder.peek_line ~k:(k []) decoder
+    |> Decoder.reword_error (fun err -> (err :> error))
+  | w ->
     let k line decoder = match of_line w line with
-      | Ok v -> Decoder.junk_eol decoder ; Decoder.Done v
+      | Ok v -> Decoder.junk_eol decoder ; Decoder.return decoder v
       | Error err -> Decoder.leave_with decoder (err :> error) in
     Decoder.peek_line ~k decoder
     |> Decoder.reword_error (fun err -> (err :> error))
