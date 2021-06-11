@@ -45,9 +45,7 @@ let rec reader ?stop ~timeout ~push flow =
     Log.err (fun m -> m "Got an exception from the reader loop: %S." (Printexc.to_string exn)) ;
     push None ; Lwt.return_ok ()
 and go ~stop ~timeout ~push dec ke flow = function
-  | Decoder.Done (committed, msg) ->
-    Ke.Rke.N.shift_exn ke committed ;
-    Ke.Rke.compress ke ; (* XXX(dinosaure): I'm not sure. *)
+  | Decoder.Done (_committed, msg) ->
     ( try push (Some msg) with _ -> () ) ;
     Log.debug (fun m -> m "Pause and waiting message.") ;
     ( Lwt.pick [ (Lwt.pause () >|= fun () -> `Continue)

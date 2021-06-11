@@ -1,6 +1,9 @@
 open Rresult
 open Lwt.Infix
 
+let src = Logs.Src.create "cri.mirage"
+module Log = (val Logs.src_log src : Logs.LOG)
+
 let ipaddr : Ipaddr.t Mimic.value = Mimic.make ~name:"cri-ipaddr"
 let domain_name : [ `host ] Domain_name.t Mimic.value = Mimic.make ~name:"cri-domain-name"
 let port : int Mimic.value = Mimic.make ~name:"cri-port"
@@ -42,11 +45,17 @@ module Make
   end
 
   module TLS = struct
+    let src = Logs.Src.create "cri.mirage.tls"
+    module Log = (val Logs.src_log src : Logs.LOG)
+
+
     include Tls_mirage.Make (TCP)
 
     type endpoint = Tls.Config.client * [ `host ] Domain_name.t option * Stack.t * Ipaddr.t * int
 
     let connect (cfg, domain_name, stack, ipaddr, port) =
+      Log.debug (fun m -> m "Try to initiate a TLS connection to %a:%d (%a)."
+        Ipaddr.pp ipaddr port Fmt.(option Domain_name.pp) domain_name) ;
       let host = Option.map Domain_name.to_string domain_name in
       TCP.connect (stack, ipaddr, port) >>= function
       | Ok flow -> client_of_flow cfg ?host flow
@@ -54,7 +63,7 @@ module Make
   end
       
   let tcp_edn, _tcp_protocol = Mimic.register ~name:"cri-tcpip" (module TCP)
-  let tls_edn, _tcp_protocol = Mimic.register ~name:"cri-tls" (module TLS)
+  let tls_edn, _tcp_protocol = Mimic.register ~priority:10 ~name:"cri-tls" (module TLS)
 
   let stack : Stack.t Mimic.value = Mimic.make ~name:"cri-stack"
   let with_stack v ctx = Mimic.add stack v ctx
@@ -75,8 +84,11 @@ module Make
     let k1 cfg domain_name stack ipaddr port =
       Lwt.return_some (cfg, domain_name, stack, ipaddr, port) in
     let k2 dns domain_name =
+      Log.debug (fun m -> m "Try to resolve %a." Domain_name.pp domain_name) ;
       DNS.gethostbyname dns domain_name >>= function
-      | Ok ipv4 -> Lwt.return_some (Ipaddr.V4 ipv4)
+      | Ok ipv4 ->
+        Log.debug (fun m -> m "%a -> %a." Domain_name.pp domain_name Ipaddr.V4.pp ipv4) ;
+        Lwt.return_some (Ipaddr.V4 ipv4)
       | _ -> Lwt.return_none in
     Mimic.empty
     |> Mimic.fold tcp_edn Mimic.Fun.[ req scheme; req stack; req ipaddr; dft port 6665 ] ~k:k0
