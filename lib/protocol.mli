@@ -75,6 +75,7 @@ type 'a t =
   | RPL_NOTOPIC : Channel.t t
   | RPL_NAMREPLY : names t
   | RPL_ENDOFNAMES : Channel.t t 
+  | ERR_NONICKNAMEGIVEN : unit t
   | RPL : reply t
 
 val pp_nick : nick Fmt.t

@@ -146,6 +146,7 @@ type 'a t =
   | RPL_NOTOPIC : Channel.t t
   | RPL_NAMREPLY : names t
   | RPL_ENDOFNAMES : Channel.t t
+  | ERR_NONICKNAMEGIVEN : unit t
   | RPL : reply t
 
 type command = Command : 'a t -> command
@@ -185,6 +186,7 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
   | "332" -> Ok (Command RPL_TOPIC)
   | "353" -> Ok (Command RPL_NAMREPLY)
   | "366" -> Ok (Command RPL_ENDOFNAMES)
+  | "431" -> Ok (Command ERR_NONICKNAMEGIVEN)
   | _ -> Rresult.R.error_msgf "Unknown command: %S" command
 
 type send = Send : 'a t * 'a -> send
@@ -359,6 +361,8 @@ let to_line
       to_prefix prefix, "366", ([ Channel.to_string channel ], None)
     | RPL, { numeric; params; } ->
       to_prefix prefix, (Fmt.str "%03d" numeric), params
+    | ERR_NONICKNAMEGIVEN, () ->
+      to_prefix prefix, "431", ([], Some "No nickname given")
 
 let pp_message ppf (Message (t, v)) = match t with
   | Pass -> Fmt.pf ppf "pass %s" v
@@ -554,6 +558,7 @@ let rec of_line
   | Recv RPL, numeric, params ->
     ( try Ok (prefix, { numeric= int_of_string numeric; params; })
       with _ -> Error `Invalid_reply )
+  | Recv ERR_NONICKNAMEGIVEN, "431", _ -> Ok (prefix, ())
   | Any, _, _ ->
     ( match command_of_line line with
     | Error _ -> Error `Invalid_command

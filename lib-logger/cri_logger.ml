@@ -20,10 +20,17 @@ type state =
   ; tick : int64 }
 and step =
   | Connected
-  | Send_user of [ `Done | `Errored ]
   | Send_nick of [ `Done | `Errored ]
+  | Send_user of [ `Done | `Errored ]
   | Join of [ `In_progress | `Done | `Errored ]
   | Log
+
+(* XXX(dinosaure): see RFC 2812, 3.1 - Connection Registration
+   The recommended order for a client to register is as follows:
+   1. Pass message
+   2. Nick message | 2. Service message
+   3. User message
+*)
 
 let state ~user ~channel ~nickname ~tick log =
   { step= Atomic.make Connected
@@ -84,21 +91,21 @@ let rec writer state closed ({ Cri_lwt.send } as ssend) =
   | `Closed -> Lwt.return_unit
   | `Continue -> match Atomic.get state.step with
     | Connected ->
-      Log.debug (fun m -> m "Connected, send user -> Send_user `Done") ;
-      send Cri.Protocol.User state.user ;
-      Atomic.set state.step (Send_user `Done) ;
+      Log.debug (fun m -> m "Connected, send nick -> Send_nick `Done") ;
+      send Cri.Protocol.Nick { Cri.Protocol.nick= state.nickname; hopcount= None; } ;
+      Atomic.set state.step (Send_nick `Done) ;
       writer state closed ssend
     | Join `In_progress ->
       writer state closed ssend
     | Send_user `Done ->
-      Log.debug (fun m -> m "Send_user `Done, send nick -> Send_nick `Done") ;
-      send Cri.Protocol.Nick { Cri.Protocol.nick= state.nickname; hopcount= None; } ;
-      Atomic.set state.step (Send_nick `Done) ;
-      writer state closed ssend
-    | Send_nick `Done ->
-      Log.debug (fun m -> m "Send_nick `Done, send join -> Join `In_progress") ;
+      Log.debug (fun m -> m "Send_user `Done, send join -> Join `In_progress") ;
       send Cri.Protocol.Join [ state.channel, None ] ;
       Atomic.set state.step (Join `In_progress) ;
+      writer state closed ssend
+    | Send_nick `Done ->
+      Log.debug (fun m -> m "Send_nick `Done, send user -> Send_user `Done") ;
+      send Cri.Protocol.User state.user ;
+      Atomic.set state.step (Send_user `Done) ;
       writer state closed ssend
     | Join `Done | Log ->
       Log.debug (fun m -> m "Join `Done | Log, terminate the application writer.") ;
@@ -116,6 +123,10 @@ let rec reader state recv ({ Cri_lwt.send } as ssend) =
     Log.info (fun m -> m "%a: %s" Cri.Channel.pp ch topic) ;
     Log.debug (fun m -> m "Start to save %a" Cri.Channel.pp ch) ;
     Atomic.set state.step (Join `Done) ;
+    reader state recv ssend
+  | Some (_, Cri.Protocol.Message (ERR_NONICKNAMEGIVEN, _)),
+    (Send_nick `Done | Send_user `Done | Join `In_progress) ->
+    Atomic.set state.step (Send_nick `Errored) ;
     reader state recv ssend
   | Some (_, Cri.Protocol.Message (Ping, v)), _ ->
     Log.debug (fun m -> m "Ping -> Pong") ;
