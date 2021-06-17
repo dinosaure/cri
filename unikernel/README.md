@@ -22,7 +22,7 @@ $ mirage configure -t unix
 $ make depends
 $ mirage build
 $ ./logger --irc=ircs://irc.libera.chat:6697/ --remote=git@localhost:log.git \
-    --ssh-seed=$SEED --channel=#mirage --nickname=noisy-bot
+    --ssh-seed=$SEED --channel=#mirage --nickname=noisy-bot --nameserver=8.8.8.8
 ```
 
 We integrate many way to communicate with a Git repository and SSH is one of
@@ -38,10 +38,19 @@ The seed is the first line and the public key is the second line. You just need
 to save the public key into your GitHub account or as an allowed key for the
 `git` Unix user.
 
-## Bugs and bad state
+## DNS nameserver
+
+Due to the design of IRC, the choice of the DNS server can be important due to
+the geographic position of your unikernel. It's why this parameter is required.
+Note that the DNS server used to communicate with the Git repository **is not**
+the same. The given nameserver is only used by the IRC client.
+
+## Bugs, bad state & improvements
 
 The unikernel is experimental and several issues exists if you give wrong
-arguments (such as a bad IRC address or a bad SSH key).
+arguments (such as a bad IRC address or a bad SSH key). In some situation, we
+can lost some messages. Indeed, `cri` does not implement the full version of
+the IRC protocol.
 
 [ocaml-git-examples]: https://github.com/mirage/ocaml-git/tree/master/unikernel/empty-commit
 [awa]: https://github.com/mirage/awa-ssh
