@@ -45,6 +45,9 @@ let of_string ?(strict= false) str =
 (* XXX(dinosaure): according to RFC 2812 but be resilient
  * with larger nickname (<3 @kit_ty_kate). *)
 
+let is str = match of_string str with
+  | Ok _ -> true | _ -> false
+
 let to_string x = x
 
 let of_string_exn ?strict str = match of_string ?strict str with

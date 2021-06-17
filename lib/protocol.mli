@@ -23,9 +23,13 @@ type reply =
   { numeric : int
   ; params : string list * string option }
 
-type mode =
+type user_mode =
   { nickname : Nickname.t
   ; modes : User_mode.modes }
+
+type channel_mode =
+  { channel : Channel.t
+  ; modes : (Channel_mode.modes * string option) list }
 
 type names =
   { channel : Channel.t
@@ -52,7 +56,8 @@ type 'a t =
   | SQuit : ([ `raw ] Domain_name.t * string) t
   | Join : (Channel.t * string option) list t
   | Notice : notice t
-  | Mode : mode t
+  | User_mode : user_mode t
+  | Channel_mode : channel_mode t
   | Privmsg : (Destination.t list * string) t
   | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
@@ -87,7 +92,7 @@ val pp_prettier : 'a Fmt.t -> 'a prettier Fmt.t
 val pp_welcome : welcome Fmt.t
 val pp_discover : discover Fmt.t
 val pp_reply : reply Fmt.t
-val pp_mode : mode Fmt.t
+val pp_user_mode : user_mode Fmt.t
 val pp_names : names Fmt.t
 val pp_host : host Fmt.t
 

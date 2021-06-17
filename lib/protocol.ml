@@ -25,9 +25,13 @@ type reply =
   { numeric : int
   ; params : string list * string option }
 
-type mode =
+type user_mode =
   { nickname : Nickname.t
   ; modes : User_mode.modes }
+
+type channel_mode =
+  { channel : Channel.t
+  ; modes : (Channel_mode.modes * string option) list }
 
 type names =
   { channel : Channel.t
@@ -72,7 +76,7 @@ let pp_reply ppf { numeric; params= ps, r; } = match ps, r with
   | [], Some r -> Fmt.pf ppf "%03d :%s" numeric r
   | [], None -> Fmt.pf ppf "%03d" numeric
 
-let pp_mode ppf { nickname; modes; } =
+let pp_user_mode ppf { nickname; modes; } =
   Fmt.pf ppf "%a %a" Nickname.pp nickname User_mode.pp modes
 
 let pp_names ppf { channel; kind; names; } =
@@ -123,7 +127,8 @@ type 'a t =
   | SQuit : ([ `raw ] Domain_name.t * string) t
   | Join : (Channel.t * string option) list t
   | Notice : notice t
-  | Mode : mode t
+  | User_mode : user_mode t
+  | Channel_mode : channel_mode t
   | Privmsg : (Destination.t list * string) t
   | Ping : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
@@ -152,7 +157,7 @@ type 'a t =
 type command = Command : 'a t -> command
 type message = Message : 'a t * 'a -> message
 
-let command_of_line (_, command, _) = match String.lowercase_ascii command with
+let command_of_line (_, command, parameters) = match String.lowercase_ascii command with
   | "pass" -> Ok (Command Pass)
   | "nick" -> Ok (Command Nick)
   | "user" -> Ok (Command User)
@@ -162,7 +167,14 @@ let command_of_line (_, command, _) = match String.lowercase_ascii command with
   | "squit" -> Ok (Command SQuit)
   | "notice" -> Ok (Command Notice)
   | "join" -> Ok (Command Join)
-  | "mode" -> Ok (Command Mode)
+  | "mode" -> ( match parameters with
+              | v :: _, _ ->
+                if Channel.is v
+                then Ok (Command Channel_mode)
+                else if Nickname.is v
+                then Ok (Command User_mode)
+                else Rresult.R.error_msgf "Unknown command: %S" command
+              | _ -> Rresult.R.error_msgf "Unknown command: %S" command )
   | "privmsg" -> Ok (Command Privmsg)
   | "ping" -> Ok (Command Ping)
   | "pong" -> Ok (Command Pong)
@@ -275,8 +287,14 @@ let to_line
       let channels = String.concat "," channels in
       let keys = String.concat "," keys in
       to_prefix prefix, "join", ([ channels; keys; ], None)
-    | Mode, { nickname; modes; } ->
+    | User_mode, { nickname; modes; } ->
       to_prefix prefix, "mode", ([ Nickname.to_string nickname ], Some (User_mode.to_string modes))
+    | Channel_mode, { channel; modes; } ->
+      let rec parameters acc = function
+        | [] -> List.rev acc
+        | (modes, None) :: tl -> parameters (Channel_mode.to_string modes :: acc) tl
+        | (modes, Some v) :: tl -> parameters (v :: Channel_mode.to_string modes :: acc) tl in
+      to_prefix prefix, "mode", (parameters [ Channel.to_string channel ] modes, None)
     | Privmsg, (dsts, msg) ->
       let dsts = List.map Destination.to_string dsts in
       let dsts = String.concat "," dsts in
@@ -466,14 +484,25 @@ let rec of_line
     ( try let channels = List.map Channel.of_string_exn channels in
           Ok (prefix, List.map (fun v -> v, None) channels)
       with _ -> Error `Invalid_parameters )
-  | Recv Mode, "mode", ([ nickname ], Some modes) ->
+  | Recv User_mode, "mode", ([ nickname ], Some modes) ->
     ( match Nickname.of_string nickname, User_mode.of_string modes with
     | Ok nickname, Ok modes -> Ok (prefix, { nickname; modes; })
     | _ -> Error `Invalid_parameters )
-  | Recv Mode, "mode", ([ nickname; modes; ], None) ->
+  | Recv User_mode, "mode", ([ nickname; modes; ], None) ->
     ( match Nickname.of_string nickname, User_mode.of_string modes with
     | Ok nickname, Ok modes -> Ok (prefix, { nickname; modes; })
     | _ -> Error `Invalid_parameters )
+  | Recv Channel_mode, "mode", (channel :: parameters, _) ->
+    ( try let channel = Channel.of_string_exn channel in
+          let rec modes acc = function
+            | [] -> List.rev acc
+            | m :: (parameters :: tl1 as tl0) ->
+              ( match Channel_mode.of_string ~ignore:false parameters with
+              | Ok _ -> modes ((Channel_mode.of_string_exn m, None) :: acc) tl0
+              | Error _ -> modes ((Channel_mode.of_string_exn m, Some parameters) :: acc) tl1 )
+            | [ m ] -> List.rev ((Channel_mode.of_string_exn m, None) :: acc) in
+          Ok (prefix, { channel; modes= modes [] parameters })
+      with _ -> Error `Invalid_parameters )
   | Recv Privmsg, "privmsg", ([ dsts ], msg) ->
     ( try let dsts = Destination.of_string_exn dsts in
           let msg = Option.value ~default:"" msg in

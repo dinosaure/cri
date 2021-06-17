@@ -54,6 +54,9 @@ let of_string_exn str =
   | Ok v -> v
   | Error (`Msg err) -> invalid_arg err
 
+let is str = match of_string str with
+  | Ok _ -> true | Error _ -> false
+
 let to_string x = x
 
 let pp = Fmt.string

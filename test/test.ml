@@ -60,5 +60,15 @@ let test06 =
     Alcotest.(check pass) "decoding" () ()
   | _ -> Alcotest.failf "Invalid state of decoding"
 
+let test07 =
+  Alcotest.test_case "mode" `Quick @@ fun () ->
+  let line = ":hannes!~hannes@193.30.40.133 MODE #mirage -o hannes\r\n" in
+  let dec = Cri.Decoder.decoder_from line in
+  match Cri.Protocol.decode dec Cri.Protocol.any with
+  | Cri.Decoder.Done (_, (_, Cri.Protocol.Message (Channel_mode, { channel= ch; modes= [ _, Some "hannes" ]; }))) ->
+    Alcotest.(check channel) "channel" ch (Cri.Channel.of_string_exn "#mirage") ;
+    ()
+  | _ -> Alcotest.failf "Invalid state of decoding"
+
 let () =
-        Alcotest.run "cri" [ "BNF", [ test01; test02; test03; test04; test05; test06 ] ]
+        Alcotest.run "cri" [ "BNF", [ test01; test02; test03; test04; test05; test06; test07 ] ]
