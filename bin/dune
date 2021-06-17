@@ -1,7 +1,6 @@
 (executable
  (name example)
  (libraries
-  ca-certs
   mirage-crypto-rng.unix
   logs
   logs.fmt
