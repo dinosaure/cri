@@ -155,26 +155,28 @@ let mimic_paf_impl time pclock stackv4v6 paf mimic_tcp =
   $ paf
   $ mimic_tcp
 
-let mimic_cri_conf () =
+let mimic_cri_conf ~nameserver () =
   let packages = [ package ~sublibs:[ "mirage" ] "cri" ] in
+  let nameserver = Key.abstract nameserver in
   impl @@ object
        inherit base_configurable
        method ty = random @-> mclock @-> time @-> stackv4v6 @-> mimic
        method module_name = "Cri_mirage.Make"
        method! packages = Key.pure packages
+       method! keys = [ nameserver ]
        method name = "cri_ctx"
        method! connect _ modname = function
          | [ _; _; _; stack; ] ->
            Fmt.str {ocaml|let cri_ctx00 = %s.with_stack %s %s.ctx in
-                          let cri_ctx01 = %s.with_dns %s cri_ctx00 in
+                          let cri_ctx01 = %s.with_dns ~nameserver:(`TCP, (%a, 53)) %s cri_ctx00 in
                           Lwt.return cri_ctx01|ocaml}
              modname stack modname
-             modname stack
+             modname Key.serialize_call nameserver stack
          | _ -> assert false
      end
 
-let mimic_cri_impl random mclock time stackv4v6 =
-  mimic_cri_conf () $ random $ mclock $ time $ stackv4v6
+let mimic_cri_impl ~nameserver random mclock time stackv4v6 =
+  mimic_cri_conf ~nameserver () $ random $ mclock $ time $ stackv4v6
 
 (* / *)
 
@@ -210,6 +212,10 @@ let irc =
   let doc = Key.Arg.info ~doc:"IRC server to connect." [ "irc" ] in
   Key.(create "irc" Arg.(required string doc))
 
+let nameserver =
+  let doc = Key.Arg.info ~doc:"DNS server used to resolve domain-name." [ "nameserver" ] in
+  Key.(create "nameserver" Arg.(required ip_address doc))
+
 let logger =
   foreign "Unikernel.Make"
     ~keys:[ Key.abstract hostname
@@ -237,7 +243,7 @@ let paf = paf_impl time stackv4v6
 let git = git ~kind:`Rsa ~seed:ssh_seed ~auth:ssh_auth
 let git = git stackv4v6 random mclock pclock time paf
 
-let irc = mimic_cri_impl random mclock time stackv4v6
+let irc = mimic_cri_impl ~nameserver random mclock time stackv4v6
 
 let () =
   register "logger"

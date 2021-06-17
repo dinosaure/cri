@@ -147,9 +147,12 @@ let rec tick ~sleep_ns state closed =
   let open Lwt.Infix in
   sleep_ns state.tick >>= fun () ->
   Lwt_mutex.with_lock state.mutex @@ begin fun () ->
-  let lst = drain state.queue in Lwt.return lst end >>= fun lst ->
+  let lst = drain state.queue in Lwt.return (List.rev lst) end >>= fun lst ->
   Log.debug (fun m -> m "Call the logger with %d msg(s)." (List.length lst)) ;
-  Lwt.async (fun () -> state.log lst) ;
+  Lwt.async
+    (fun () -> Lwt.catch (state.log lst)
+    (fun exn -> Log.err (fun m -> m "Got an exception from the logger: %s." (Printexc.to_string exn)
+              ; Lwt.return_unit ) ;
   Lwt.pick [ closed; (Lwt.pause () >|= fun () -> `Continue) ] >>= function
   | `Closed -> Lwt.return_unit
   | `Continue -> tick ~sleep_ns state closed

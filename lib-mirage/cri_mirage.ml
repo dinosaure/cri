@@ -87,9 +87,11 @@ module Make
       Log.debug (fun m -> m "Try to resolve %a." Domain_name.pp domain_name) ;
       DNS.gethostbyname dns domain_name >>= function
       | Ok ipv4 ->
-        Log.debug (fun m -> m "%a -> %a." Domain_name.pp domain_name Ipaddr.V4.pp ipv4) ;
+        Log.debug (fun m -> m "DNS: %a -> %a." Domain_name.pp domain_name Ipaddr.V4.pp ipv4) ;
         Lwt.return_some (Ipaddr.V4 ipv4)
-      | _ -> Lwt.return_none in
+      | _ ->
+        Log.warn (fun m -> m "No IPv4 found for %a." Domain_name.pp domain_name) ;
+        Lwt.return_none in
     Mimic.empty
     |> Mimic.fold tcp_edn Mimic.Fun.[ req scheme; req stack; req ipaddr; dft port 6665 ] ~k:k0
     |> Mimic.fold tls_edn Mimic.Fun.[ dft cfg (Tls.Config.client ~authenticator ())

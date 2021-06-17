@@ -136,6 +136,7 @@ let run ?stop ?timeout ~ctx =
   let push_send v = try push_send v with _ -> () in
   `Fiber
     (Mimic.resolve ctx >>? fun flow ->
+     Log.debug (fun m -> m "Connected to the IRC server.") ;
      Lwt.pick
        [ reader ?stop ~timeout ~push:(fun v -> try push_recv v with _ -> ()) flow
        ; writer ~timeout ~next:(fun () -> Lwt_stream.get send) flow ] >>= fun res ->
