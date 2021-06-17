@@ -127,7 +127,7 @@ type recv = unit -> (Cri.Protocol.prefix option * Cri.Protocol.message) option L
 type send = { send : 'a. ?prefix:Cri.Protocol.prefix -> 'a Cri.Protocol.t -> 'a -> unit } [@@unboxed]
 type close = unit -> unit
 
-let run ?stop ?timeout ~ctx =
+let run ?stop ?timeout ctx =
   let timeout = match timeout with
     | Some timeout -> timeout
     | None -> let never, _ = Lwt.wait () in fun () -> never in

@@ -89,7 +89,7 @@ let run ctx =
   let stop = Lwt_switch.create () in
   let state = Cri_logger.state ~user ~channel:ocaml ~nickname:noisy_bot
     ~tick:1_000_000_000L log in
-  let `Fiber th, recv, send, close = Cri_lwt.run ~timeout ~stop ~ctx in
+  let `Fiber th, recv, send, close = Cri_lwt.run ~timeout ~stop ctx in
   Lwt.both
     (th >>= fun res -> Lwt_switch.turn_off stop >|= close >>= fun () -> Lwt.return res)
     (Cri_logger.handler ~sleep_ns ~stop state recv send close) >>= function

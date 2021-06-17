@@ -44,6 +44,6 @@ type close = unit -> unit
 val run :
      ?stop:Lwt_switch.t
   -> ?timeout:(unit -> unit Lwt.t)
-  -> ctx:Mimic.ctx
+  -> Mimic.ctx
   -> [ `Fiber of (unit, error) result Lwt.t ]
      * recv * send * close
