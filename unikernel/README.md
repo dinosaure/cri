@@ -45,6 +45,68 @@ the geographic position of your unikernel. It's why this parameter is required.
 Note that the DNS server used to communicate with the Git repository **is not**
 the same. The given nameserver is only used by the IRC client.
 
+## Deploy on Gcloud
+
+It's possible to deploy the unikernel to `gcloud`. This is a mini-tutorial to
+deploy `cri-logger` on `gcloud`. Assume that you have a Gcloud project and the
+`gcloud` command-line available. You must have a GitHub repository and we will
+try to use SSH to let the unikernel to "push" logs on it.
+
+You must create an SSH key via `awa-ssh`:
+```sh
+$ awa_gen_key
+seed is <SEED>
+ssh-rsa ... awa@awa.local
+```
+
+The first line is the seed to regenerate the private RSA key. The second line
+is the public key which must be added to your GitHub account as an allowed SSH key.
+You must keep the SSH seed to configure the unikernel then:
+```sh
+$ cd cri/unikernel
+$ mirage configure -t virtio --dhcp true --hostname cri \
+  --irc ircs://irc.libera.chat:6697/ \
+  --remote git@github.com:user/repository \
+  --nickname my-noisy-bot \
+  --channel="##mirage" \
+  --tick 86400 \
+  --nameserver 9.9.9.9 \
+  --ssh-seed <SEED>
+```
+
+You can change any of these parameters. `tick` is how long we log the given channel
+- for instance, 1 day. `remote` is your GitHub repository and you can change
+`nickname` and `channel as you want. You must copy the same `<SEED>` given by
+`awa_gen_key`. Finally, you must choose the DNS server depending on the geographic
+position of your unikernel (your `gcloud` "region").
+
+Now, you are able to compile the unikernel if you correctly `pin` `cri` with `opam`:
+```sh
+$ make depends
+$ mirage build
+$ solo5-virtio-mkimage -f tar logger.tar.gz logger.virtio
+```
+
+We can start to deploy the unikernel then:
+```sh
+$ gsutil mb gs://cri-logger
+$ gsutil cp logger.tar.gz gs://cri-logger
+$ gcloud compute images create cri-logger --source-uri gs://cri-logger/logger.tar.gz
+$ gcloud compute addresses create cri-logger --region europe-west1
+```
+
+You must take the IP address given by `gcloud` to be able then to create an instance:
+```sh
+$ gcloud compute instances create cri-logger \
+  --image cri-logger \
+  --address <IP> \
+  --zone europe-west1-b \
+  --machine-type f1-micro \
+```
+
+Et voilà! You will see in few second the bot on your channel and, in one day, the
+unikernel will push a new file on your GitHub repository.
+
 ## Bugs, bad state & improvements
 
 The unikernel is experimental and several issues exists if you give wrong
