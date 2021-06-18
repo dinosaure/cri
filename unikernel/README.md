@@ -76,7 +76,7 @@ $ mirage configure -t virtio --dhcp true --hostname cri \
 
 You can change any of these parameters. `tick` is how long we log the given channel
 - for instance, 1 day. `remote` is your GitHub repository and you can change
-`nickname` and `channel as you want. You must copy the same `<SEED>` given by
+`nickname` and `channel` as you want. You must copy the same `<SEED>` given by
 `awa_gen_key`. Finally, you must choose the DNS server depending on the geographic
 position of your unikernel (your `gcloud` "region").
 
