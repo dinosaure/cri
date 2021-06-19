@@ -76,7 +76,7 @@ module Make
       (fun () -> Lwt.wakeup_later wk `Error ; Lwt_switch.turn_off stop) ;
     let state = Cri_logger.state ~user ~channel ~nickname ~tick (save ~errored ctx_git uri) in
     let `Fiber th, recv, send, close = Cri_lwt.run ~stop
-      ~timeout:(fun () -> Time.sleep_ns 256_000_000_000L) ~ctx:ctx_irc in
+      ~timeout:(fun () -> Time.sleep_ns 256_000_000_000L) ctx_irc in
     Lwt.both
       (th >>= fun res -> Lwt_switch.turn_off stop >|= close >>= fun () -> Lwt.return res)
       (Cri_logger.handler ~sleep_ns:Time.sleep_ns ~stop state recv send close) >>= function
