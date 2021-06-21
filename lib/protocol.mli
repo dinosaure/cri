@@ -63,6 +63,7 @@ type 'a t =
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Part : (Channel.t list * string option) t
   | Topic : (Channel.t * string option) t
+  | Error : string option t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t

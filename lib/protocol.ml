@@ -134,6 +134,7 @@ type 'a t =
   | Pong : ([ `raw ] Domain_name.t option * [ `raw ] Domain_name.t option) t
   | Part : (Channel.t list * string option) t
   | Topic : (Channel.t * string option) t
+  | Error : string option t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -180,6 +181,7 @@ let command_of_line (_, command, parameters) = match String.lowercase_ascii comm
   | "pong" -> Ok (Command Pong)
   | "part" -> Ok (Command Part)
   | "topic" -> Ok (Command Topic)
+  | "error" -> Ok (Command Error)
   | "001" -> Ok (Command RPL_WELCOME)
   | "002" -> Ok (Command RPL_YOURHOST)
   | "003" -> Ok (Command RPL_CREATED)
@@ -318,6 +320,8 @@ let to_line
       to_prefix prefix, "part", ([ channels ], msg)
     | Topic, (channel, topic) ->
       to_prefix prefix, "topic", ([ Channel.to_string channel ], topic)
+    | Error, msg ->
+      to_prefix prefix, "error", ([], msg)
     | RPL_WELCOME, v ->
       let param = match v with
         | `Pretty { nick; _ } -> [ nick ]
@@ -551,6 +555,7 @@ let rec of_line
     ( match Channel.of_string channel with
     | Ok channel -> Ok (prefix, (channel, topic))
     | Error _ -> Error `Invalid_parameters )
+  | Recv Error, "error", (_, msg) -> Ok (prefix, msg)
   | Recv RPL_WELCOME,       "001", params -> Ok (prefix, to_prettier RPL_WELCOME       params)
   | Recv RPL_YOURHOST,      "002", params -> Ok (prefix, to_prettier RPL_YOURHOST      params)
   | Recv RPL_CREATED,       "003", params -> Ok (prefix, to_prettier RPL_CREATED       params)
