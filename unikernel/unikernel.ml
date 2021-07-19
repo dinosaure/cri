@@ -36,7 +36,7 @@ module Make
   let info () =
     let d, ps = Pclock.now_d_ps () in
     let ptime = Ptime.v (d, ps) in
-    Irmin.Info.v ~date:(Int64.of_int d)
+    Irmin.Info.v ~date:(Int64.of_float (Ptime.to_float_s ptime))
       ~author:(Key_gen.nickname ())
       (Fmt.str "log %a" Ptime.pp ptime)
 
@@ -53,7 +53,9 @@ module Make
     Store.Repo.v config >>= Store.master >>= fun store ->
     let upstream = Store.remote ~ctx uri in
     Sync.pull ~depth:1 store upstream `Set >>= function
-    | Error _ -> Lwt_switch.turn_off errored
+    | Error _ ->
+      Logs.err (fun m -> m "Impossible to pull the remote Git repository.") ;
+      Lwt_switch.turn_off errored
     | Ok (`Head _ | `Empty as parent) ->
       let parents = match parent with
         | `Head commit -> [ commit ]
@@ -62,10 +64,17 @@ module Make
       let k = [ Ptime.to_rfc3339 ~space:false ~tz_offset_s:0 now ] in
       let msgs = msgs_to_string msgs in
       Store.set ~parents ~info store k msgs >>= function
-      | Error _ -> Lwt_switch.turn_off errored
+      | Error _ ->
+        Logs.err (fun m -> m "Impossible to locally create a new commit.") ;
+        Lwt_switch.turn_off errored
       | Ok () -> Sync.push store upstream >>= function
-        | Ok _ -> Lwt.return_unit
-        | Error _ -> Lwt_switch.turn_off errored
+        | Ok `Empty -> Lwt.return_unit
+        | Ok (`Head commit) ->
+          Logs.debug (fun m -> m "New commit: %a" Store.Commit.pp_hash commit) ;
+          Lwt.return_unit
+        | Error _ ->
+          Logs.err (fun m -> m "Impossible to push to the remote Git repository.") ;
+          Lwt_switch.turn_off errored
 
   let log config ctx_irc ctx_git uri =
     let { user; channel; nickname; tick; } = config in
@@ -83,8 +92,15 @@ module Make
     | Ok (), Ok () ->
       ( match Lwt.state error with
       | Lwt.Sleep -> Lwt.cancel error ; Lwt.return `Stop
-      | Lwt.Fail _ | Lwt.Return _ -> Lwt.return `Retry )
-    | Error _, _ | _, Error _ -> Lwt.return `Retry
+      | Lwt.Fail _ | Lwt.Return `Error ->
+        Logs.warn (fun m -> m "The saver was errored, retry to log the IRC channel.") ;
+        Lwt.return `Retry )
+    | Error err, _ ->
+      Logs.err (fun m -> m "Got an error from the I/O thread: %a." Cri_lwt.pp_error err) ;
+      Lwt.return `Retry
+    | _, Error err ->
+      Logs.err (fun m -> m "Got an error from the logic thread: %a." Cri_logger.pp_error err) ;
+      Lwt.return `Retry
 
   let start () () _stack ctx_irc ctx_git =
     let config = config () in
