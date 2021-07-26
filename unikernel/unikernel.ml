@@ -84,7 +84,12 @@ module Make
       ( match Lwt.state error with
       | Lwt.Sleep -> Lwt.cancel error ; Lwt.return `Stop
       | Lwt.Fail _ | Lwt.Return _ -> Lwt.return `Retry )
-    | Error _, _ | _, Error _ -> Lwt.return `Retry
+    | Error err, _ ->
+      Logs.err (fun m -> m "Got an error from the I/O loop: %a." Cri_lwt.pp_error err) ;
+      Lwt.return `Retry
+    | _, Error err ->
+      Logs.err (fun m -> m "Got an error from the logic loop: %a." Cri_logger.pp_error err) ;
+      Lwt.return `Retry
 
   let start () () _stack ctx_irc ctx_git =
     let config = config () in
