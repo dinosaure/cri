@@ -26,7 +26,7 @@ depends: [
   "mirage-time" {>= "2.0.1"}
   "ptime" {>= "0.8.5"}
   "rresult" {>= "0.6.0"}
-  "tls-mirage" {>= "0.13.1"}
+  "tls-mirage" {>= "0.14.0"}
   "uri" {>= "4.2.0"}
   "alcotest" {>= "1.4.0" & with-test}
 ]

@@ -53,10 +53,9 @@ module Make
 
     type endpoint = Tls.Config.client * [ `host ] Domain_name.t option * Stack.t * Ipaddr.t * int
 
-    let connect (cfg, domain_name, stack, ipaddr, port) =
+    let connect (cfg, host, stack, ipaddr, port) =
       Log.debug (fun m -> m "Try to initiate a TLS connection to %a:%d (%a)."
-        Ipaddr.pp ipaddr port Fmt.(option Domain_name.pp) domain_name) ;
-      let host = Option.map Domain_name.to_string domain_name in
+        Ipaddr.pp ipaddr port Fmt.(option Domain_name.pp) host) ;
       TCP.connect (stack, ipaddr, port) >>= function
       | Ok flow -> client_of_flow cfg ?host flow
       | Error err -> Lwt.return_error (`Write err)
