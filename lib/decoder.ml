@@ -162,7 +162,7 @@ module BNF = struct
     | '\x00' | '\r' | '\n' -> false
     | _ -> true
 
-  let failf fmt = Fmt.kstrf fail fmt
+  let failf fmt = Fmt.kstr fail fmt
 
   let command =
         (take_while1 is_letter)

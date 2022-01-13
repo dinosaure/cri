@@ -24,7 +24,7 @@ let pp_host ppf = function
 let pp ppf = function
   | Channel v -> Channel.pp ppf v
   | User_with_servername { user; host; servername; } ->
-    Fmt.pf ppf "%s%a@%a" user Fmt.(option (prefix (const string "%") pp_host)) host
+    Fmt.pf ppf "%s%a@%a" user Fmt.(option ((const string "%") ++ pp_host)) host
       pp_host servername
   | User_with_host { user; host; } ->
     Fmt.pf ppf "%s%%%a" user pp_host host
@@ -64,7 +64,7 @@ end
 let to_string = function
   | Channel v -> Channel.to_string v
   | User_with_servername { user; host; servername; } ->
-    Fmt.str "%s%a@%a" user Fmt.(option (prefix (const string "%") pp_host)) host
+    Fmt.str "%s%a@%a" user Fmt.(option ((const string "%") ++ pp_host)) host
       pp_host servername
   | User_with_host { user; host; } ->
     Fmt.str "%s%%%a" user pp_host host

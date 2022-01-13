@@ -71,8 +71,8 @@ let pp_discover ppf { users; services; servers; } =
   Fmt.pf ppf "users:%d, services: %d, servers:%d" users services servers
 
 let pp_reply ppf { numeric; params= ps, r; } = match ps, r with
-  | _ :: _, Some r -> Fmt.pf ppf "%03d %a :%s" numeric Fmt.(list ~sep:(always "@ ") string) ps r
-  | _ :: _, None -> Fmt.pf ppf "%03d %a" numeric Fmt.(list ~sep:(always "@ ") string) ps
+  | _ :: _, Some r -> Fmt.pf ppf "%03d %a :%s" numeric Fmt.(list ~sep:(any "@ ") string) ps r
+  | _ :: _, None -> Fmt.pf ppf "%03d %a" numeric Fmt.(list ~sep:(any "@ ") string) ps
   | [], Some r -> Fmt.pf ppf "%03d :%s" numeric r
   | [], None -> Fmt.pf ppf "%03d" numeric
 
@@ -104,8 +104,8 @@ let pp_prefix ppf (prefix : prefix) = match prefix with
   | User { name; user; host; } ->
     Fmt.pf ppf "%a%a%a"
       Nickname.pp name
-      Fmt.(option (prefix (const string "!") string)) user
-      Fmt.(option (prefix (const string "@") pp_host)) host
+      Fmt.(option ((const string "!") ++ string)) user
+      Fmt.(option ((const string "@") ++ pp_host)) host
 
 module Fun = struct
   type ('k, 'res) args =
@@ -222,7 +222,7 @@ let to_prefix : prefix option -> _ = function
   | None -> None
 
 let of_prettier pp = function
-  | `Pretty v -> Some (Fmt.strf "%a" pp v)
+  | `Pretty v -> Some (Fmt.str "%a" pp v)
   | `String str -> Some str
   | `None -> None
 
@@ -398,8 +398,8 @@ let pp_message ppf (Message (t, v)) = match t with
   | _ ->
     let _prefix, command, (ps, v) = to_line t v in
     match v with
-    | Some v -> Fmt.pf ppf "%s %a :%s" command Fmt.(list ~sep:(always "@ ") string) ps v
-    | None -> Fmt.pf ppf "%s %a" command Fmt.(list ~sep:(always "@ ") string) ps
+    | Some v -> Fmt.pf ppf "%s %a :%s" command Fmt.(list ~sep:(any "@ ") string) ps v
+    | None -> Fmt.pf ppf "%s %a" command Fmt.(list ~sep:(any "@ ") string) ps
 
 let apply_keys channels keys =
   let rec go acc channels keys = match channels with
