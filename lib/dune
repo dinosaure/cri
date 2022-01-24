@@ -4,6 +4,7 @@
  (libraries
   ipaddr
   ke
+  astring
   rresult
   ptime
   hxd.string

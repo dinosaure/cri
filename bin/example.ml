@@ -51,7 +51,7 @@ let make_tcp inet_addr port =
 
 let make_tls tls host sockaddr = Lwt.return_some (tls, host, sockaddr)
 
-let authenticator ~host:_ _ = Ok None
+let authenticator ?ip:_ ~host:_ _ = Ok None
 let default = Tls.Config.client ~authenticator ()
 
 let ctx_of_uri uri =

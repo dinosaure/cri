@@ -13,8 +13,9 @@ let scheme : string Mimic.value = Mimic.make ~name:"cri-scheme"
 module Make
   (Random : Mirage_random.S)
   (Mclock : Mirage_clock.MCLOCK)
+  (Pclock : Mirage_clock.PCLOCK)
   (Time : Mirage_time.S)
-  (Stack : Mirage_stack.V4V6) = struct
+  (Stack : Tcpip.Stack.V4V6) = struct
   module TCP = struct
     include Stack.TCP
 
@@ -67,14 +68,14 @@ module Make
   let stack : Stack.t Mimic.value = Mimic.make ~name:"cri-stack"
   let with_stack v ctx = Mimic.add stack v ctx
 
-  module DNS = Dns_client_mirage.Make (Random) (Time) (Mclock) (Stack)
+  module DNS = Dns_client_mirage.Make (Random) (Time) (Mclock) (Pclock) (Stack)
 
   let dns : DNS.t Mimic.value = Mimic.make ~name:"cri-dns"
-  let with_dns ?size ?nameserver ?timeout v ctx =
-    let v = DNS.create ?size ?nameserver ?timeout v in
+  let with_dns ?size ?nameservers ?timeout v ctx =
+    let v = DNS.create ?size ?nameservers ?timeout v in
     Mimic.add dns v ctx
 
-  let authenticator ~host:_ _ = Ok None
+  let authenticator ?ip:_ ~host:_ _ = Ok None
 
   let ctx =
     let k0 scheme stack ipaddr port = match scheme with
