@@ -71,8 +71,8 @@ module Make
   module DNS = Dns_client_mirage.Make (Random) (Time) (Mclock) (Pclock) (Stack)
 
   let dns : DNS.t Mimic.value = Mimic.make ~name:"cri-dns"
-  let with_dns ?size ?nameservers ?timeout v ctx =
-    let v = DNS.create ?size ?nameservers ?timeout v in
+  let with_dns ?cache_size ?nameservers ?timeout v ctx =
+    let v = DNS.create ?cache_size ?nameservers ?timeout v in
     Mimic.add dns v ctx
 
   let authenticator ?ip:_ ~host:_ _ = Ok None
