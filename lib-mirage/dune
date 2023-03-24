@@ -11,4 +11,4 @@
   mirage-random
   mirage-clock
   mirage-time
-  dns-client.mirage))
+  dns-client-mirage))
