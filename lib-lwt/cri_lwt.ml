@@ -127,7 +127,7 @@ type recv = unit -> (Cri.Protocol.prefix option * Cri.Protocol.message) option L
 type send = { send : 'a. ?prefix:Cri.Protocol.prefix -> 'a Cri.Protocol.t -> 'a -> unit } [@@unboxed]
 type close = unit -> unit
 
-let run ?stop ?timeout ctx =
+let run ?(connected= Fun.const Lwt.return_unit) ?stop ?timeout ctx =
   let timeout = match timeout with
     | Some timeout -> timeout
     | None -> let never, _ = Lwt.wait () in fun () -> never in
@@ -136,6 +136,7 @@ let run ?stop ?timeout ctx =
   let push_send v = try push_send v with _ -> () in
   `Fiber
     (Mimic.resolve ctx >>? fun flow ->
+     connected () >>= fun () ->
      Log.debug (fun m -> m "Connected to the IRC server.") ;
      Lwt.pick
        [ reader ?stop ~timeout ~push:(fun v -> try push_recv v with _ -> ()) flow
