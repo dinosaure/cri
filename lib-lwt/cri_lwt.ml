@@ -38,7 +38,7 @@ let rec reader ?stop ~timeout ~push flow =
   let ke = Ke.Rke.create ~capacity:0x1000 Bigarray.char in
   let th, u = Lwt.wait () in
   Lwt.catch begin fun () ->
-        Lwt_switch.add_hook stop (fun () -> Lwt.wakeup_later u `Stop ; Lwt.return_unit) ;
+        Lwt_switch.add_hook_or_exec stop (fun () -> Lwt.wakeup_later u `Stop ; Lwt.return_unit) >>= fun () ->
         Log.debug (fun m -> m "Launch the reader.") ;
         go ~stop:th ~timeout ~push dec ke flow (Protocol.decode dec Protocol.Any)
   end @@ fun exn ->
