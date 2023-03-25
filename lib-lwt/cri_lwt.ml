@@ -31,7 +31,16 @@ type error = [ reader_error | writer_error ]
 
 type signal =
   [ Cstruct.t Mirage_flow.or_eof
-  | `Continue | `Stop | `Time_out ]
+  | `Continue | `Stop | `Timeout ]
+
+let pause_and_continue () =
+  Lwt.pause () >|= fun () -> `Continue
+
+let launch_timeout ~timeout =
+  timeout () >|= fun () -> Result.ok `Timeout
+
+let try_to_read flow =
+  Mimic.read flow >|= fun res -> (res :> (signal, _) result)
 
 let rec reader ?stop ~timeout ~push flow =
   let dec = Decoder.decoder () in
@@ -48,7 +57,7 @@ and go ~stop ~timeout ~push dec ke flow = function
   | Decoder.Done (_committed, msg) ->
     ( try push (Some msg) with _ -> () ) ;
     Log.debug (fun m -> m "Pause and waiting message.") ;
-    ( Lwt.pick [ (Lwt.pause () >|= fun () -> `Continue)
+    ( Lwt.pick [ pause_and_continue ()
                ; stop ] >>= function
     | `Continue -> go ~stop ~timeout ~push dec ke flow (Protocol.decode dec Protocol.Any)
     | `Stop -> push None ; Lwt.return_ok () )
@@ -56,15 +65,15 @@ and go ~stop ~timeout ~push dec ke flow = function
     Log.debug (fun m -> m "Read the flow.") ;
     ( match Ke.Rke.N.peek ke with
     | [] ->
-      ( Lwt.pick [ (Mimic.read flow >|= fun res -> (res :> (signal, _) result))
-                 ; (stop >|= fun v -> Rresult.R.ok (v :> signal))
-                 ; (timeout () >|= fun () -> Rresult.R.ok `Time_out) ] >>= function
+      ( Lwt.pick [ try_to_read flow
+                 ; (stop >|= fun v -> Result.ok (v :> signal))
+                 ; launch_timeout ~timeout ] >>= function
       | Error err ->
         Log.err (fun m -> m "Got an error while reading on the flow: %a." Mimic.pp_error err) ;
         Lwt.return_error (err :> error)
       | Ok `Continue ->
         assert false (* XXX(dinosaure): it's safe! *)
-      | Ok `Time_out ->
+      | Ok `Timeout ->
         Log.debug (fun m -> m "The client time-out on the reader.") ;
         push None ; Lwt.return_error `Time_out
       | Ok `Stop ->
