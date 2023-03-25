@@ -93,10 +93,12 @@ module BNF = struct
     | '0' .. '9' -> true
     | _ -> false
 
+  (* XXX(dinosaure): currently, we handle '*' which is not described by the RFC but
+     freenode don't tell us the fully qualified domain-name and uses [*.freenode.net]. *)
   let name = peek_char >>= function
-    | None | Some ('a' .. 'z' | 'A' .. 'Z') ->
+    | None | Some ('a' .. 'z' | 'A' .. 'Z' | '*') ->
       ( take_while1 @@ function
-      | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' -> true
+      | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' | '*' -> true
       | _ -> false ) >>= fun str ->
       if str.[String.length str - 1] = '-'
       then fail "name"
