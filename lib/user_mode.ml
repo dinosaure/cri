@@ -61,3 +61,10 @@ let to_string { add; rem; } =
   if rem <> [] then ( Bytes.set res !pos '-' ; incr pos
                     ; List.iter (fun v -> Bytes.set res !pos (to_letter v) ; incr pos) rem ) ;
   Bytes.unsafe_to_string res
+
+let to_int lst =
+  let res = ref 0 in
+  List.iter (function
+    | Away -> res := !res lor 0b10
+    | Invisible -> res := !res lor 0b100
+    | _ -> ()) lst; !res
