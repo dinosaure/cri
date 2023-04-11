@@ -40,6 +40,9 @@ type host =
   [ `Host of [ `raw ] Domain_name.t
   | `Ip6 of Ipaddr.V6.t ]
 
+type mechanism =
+  | PLAIN | LOGIN
+
 type prefix =
   | Server of host
   | User of { name : Nickname.t
@@ -64,6 +67,7 @@ type 'a t =
   | Part : (Channel.t list * string option) t
   | Topic : (Channel.t * string option) t
   | Error : string option t
+  | Authenticate : [ `Mechanism of mechanism | `Payload of string ] t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t

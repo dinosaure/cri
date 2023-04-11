@@ -107,6 +107,13 @@ let pp_prefix ppf (prefix : prefix) = match prefix with
       Fmt.(option ((const string "!") ++ string)) user
       Fmt.(option ((const string "@") ++ pp_host)) host
 
+type mechanism =
+  | PLAIN | LOGIN
+
+let pp_mechanism ppf = function
+  | PLAIN -> Fmt.string ppf "PLAIN"
+  | LOGIN -> Fmt.string ppf "LOGIN"
+
 module Fun = struct
   type ('k, 'res) args =
     | [] : ('res, 'res) args
@@ -135,6 +142,7 @@ type 'a t =
   | Part : (Channel.t list * string option) t
   | Topic : (Channel.t * string option) t
   | Error : string option t
+  | Authenticate : [ `Mechanism of mechanism | `Payload of string ] t
   | RPL_WELCOME : welcome prettier t
   | RPL_LUSERCLIENT : discover prettier t
   | RPL_YOURHOST : ([ `raw ] Domain_name.t * string) prettier t
@@ -182,6 +190,7 @@ let command_of_line (_, command, parameters) = match String.lowercase_ascii comm
   | "part" -> Ok (Command Part)
   | "topic" -> Ok (Command Topic)
   | "error" -> Ok (Command Error)
+  | "authenticate" -> Ok (Command Authenticate)
   | "001" -> Ok (Command RPL_WELCOME)
   | "002" -> Ok (Command RPL_YOURHOST)
   | "003" -> Ok (Command RPL_CREATED)
@@ -322,6 +331,10 @@ let to_line
       to_prefix prefix, "topic", ([ Channel.to_string channel ], topic)
     | Error, msg ->
       to_prefix prefix, "error", ([], msg)
+    | Authenticate, `Mechanism mechanism ->
+      to_prefix prefix, "authenticate", ([ Fmt.str "%a" pp_mechanism mechanism ], None)
+    | Authenticate, `Payload str ->
+      to_prefix prefix, "authenticate", ([ str ], None)
     | RPL_WELCOME, v ->
       let param = match v with
         | `Pretty { nick; _ } -> [ nick ]
@@ -395,6 +408,10 @@ let pp_message ppf (Message (t, v)) = match t with
   | Quit -> Fmt.pf ppf "quit %S" v
   | SQuit -> Fmt.pf ppf "squit %a %S" Domain_name.pp (fst v) (snd v)
   | Join -> Fmt.pf ppf "join %a" Fmt.(Dump.list (Dump.pair Channel.pp (option (fmt "%S")))) v
+  | Authenticate ->
+    ( match v with
+    | `Mechanism m -> Fmt.pf ppf "authenticate %a" pp_mechanism m
+    | `Payload str -> Fmt.pf ppf "authenticate %s" str )
   | _ ->
     let _prefix, command, (ps, v) = to_line t v in
     match v with
@@ -556,6 +573,12 @@ let rec of_line
     | Ok channel -> Ok (prefix, (channel, topic))
     | Error _ -> Error `Invalid_parameters )
   | Recv Error, "error", (_, msg) -> Ok (prefix, msg)
+  | Recv Authenticate, "authenticate", ([ "login" ], _) ->
+      Ok (prefix, (`Mechanism LOGIN))
+  | Recv Authenticate, "authenticate", ([ "plain" ], _) ->
+      Ok (prefix, (`Mechanism PLAIN))
+  | Recv Authenticate, "authenticate", ([ str ], _) ->
+      Ok (prefix, (`Payload str))
   | Recv RPL_WELCOME,       "001", params -> Ok (prefix, to_prettier RPL_WELCOME       params)
   | Recv RPL_YOURHOST,      "002", params -> Ok (prefix, to_prettier RPL_YOURHOST      params)
   | Recv RPL_CREATED,       "003", params -> Ok (prefix, to_prettier RPL_CREATED       params)
