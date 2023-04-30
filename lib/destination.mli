@@ -26,3 +26,4 @@ end
 val to_string : t -> string
 val of_string : string -> (t list, [> `Msg of string ]) result
 val of_string_exn : string -> t list
+val everywhere : t -> bool

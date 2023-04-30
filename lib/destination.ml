@@ -82,3 +82,7 @@ let of_string str =
 let of_string_exn str = match of_string str with
   | Ok vs -> vs
   | Error (`Msg err) -> invalid_arg err
+
+let everywhere = function
+  | Channel ch -> Channel.equal (Channel.of_string_exn "*") ch
+  | _ -> false

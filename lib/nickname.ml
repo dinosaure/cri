@@ -54,3 +54,6 @@ let of_string_exn ?strict str = match of_string ?strict str with
   | Ok v -> v | Error (`Msg err) -> invalid_arg err
 
 let pp = Fmt.string
+let equal = String.equal
+
+module Set = Set.Make (String)
