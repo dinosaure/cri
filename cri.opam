@@ -30,6 +30,7 @@ depends: [
   "tls-mirage" {>= "0.14.0"}
   "uri" {>= "4.2.0"}
   "astring" {>= "0.8.5"}
+  "logs"
   "alcotest" {>= "1.4.0" & with-test}
 ]
 build: ["dune" "build" "-p" name "-j" jobs]

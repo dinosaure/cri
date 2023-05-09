@@ -2,6 +2,7 @@
  (name cri)
  (public_name cri)
  (libraries
+  logs
   ipaddr
   ke
   astring

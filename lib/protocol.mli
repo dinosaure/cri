@@ -87,6 +87,7 @@ type 'a t =
   | RPL_ENDOFNAMES : Channel.t t 
   | ERR_NONICKNAMEGIVEN : unit t
   | ERR_NICKNAMEINUSE : Nickname.t t
+  | ERR_NOTREGISTERED : unit t
   | RPL : reply t
 
 val pp_nick : nick Fmt.t

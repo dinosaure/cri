@@ -1,4 +1,6 @@
-[@@@warning "-8"]
+let src = Logs.Src.create "cri.protocol"
+
+module Log = (val Logs.src_log src : Logs.LOG)
 
 type nick = { nick : Nickname.t; hopcount : int option; }
 
@@ -61,7 +63,7 @@ let pp_notice ppf { dsts; msg; } =
 
 let pp_prettier pp ppf = function
   | `Pretty v -> pp ppf v
-  | `String v -> Fmt.string ppf v
+  | `String v -> Fmt.pf ppf "%S" v
   | `None -> ()
 
 let pp_welcome ppf { nick; user; host; } =
@@ -162,6 +164,7 @@ type 'a t =
   | RPL_ENDOFNAMES : Channel.t t
   | ERR_NONICKNAMEGIVEN : unit t
   | ERR_NICKNAMEINUSE : Nickname.t t
+  | ERR_NOTREGISTERED : unit t
   | RPL : reply t
 
 type command = Command : 'a t -> command
@@ -212,7 +215,11 @@ let command_of_line (_, command, parameters) = match String.lowercase_ascii comm
   | "366" -> Ok (Command RPL_ENDOFNAMES)
   | "431" -> Ok (Command ERR_NONICKNAMEGIVEN)
   | "433" -> Ok (Command ERR_NICKNAMEINUSE)
-  | _ -> Rresult.R.error_msgf "Unknown command: %S" command
+  | "451" -> Ok (Command ERR_NOTREGISTERED)
+  | code ->
+      Log.warn (fun m -> m "Got an unknown command %S" code);
+      ( try let _ = int_of_string code in Ok (Command RPL)
+        with _ -> Rresult.R.error_msgf "Unknown command: %S" command )
 
 type send = Send : 'a t * 'a -> send
 
@@ -398,8 +405,14 @@ let to_line
       to_prefix prefix, "366", ([ Channel.to_string channel ], None)
     | RPL, { numeric; params; } ->
       to_prefix prefix, (Fmt.str "%03d" numeric), params
+    | RPL_LUSERCHANNELS, v ->
+      let pp ppf n =
+        Fmt.pf ppf "%d channels formed" n in
+      to_prefix prefix, "254", ([], of_prettier pp v)
     | ERR_NONICKNAMEGIVEN, () ->
       to_prefix prefix, "431", ([], Some "No nickname given")
+    | ERR_NOTREGISTERED, () ->
+      to_prefix prefix, "451", ([], Some "You are not registered")
     | ERR_NICKNAMEINUSE, nickname ->
         to_prefix prefix, "433", ([ Nickname.to_string nickname ], None)
 
@@ -417,10 +430,12 @@ let pp_message ppf (Message (t, v)) = match t with
     | `Mechanism m -> Fmt.pf ppf "authenticate %a" pp_mechanism m
     | `Payload str -> Fmt.pf ppf "authenticate %s" str )
   | _ ->
-    let _prefix, command, (ps, v) = to_line t v in
-    match v with
-    | Some v -> Fmt.pf ppf "%s %a :%s" command Fmt.(list ~sep:(any "@ ") string) ps v
-    | None -> Fmt.pf ppf "%s %a" command Fmt.(list ~sep:(any "@ ") string) ps
+    try
+      let _prefix, command, (ps, v) = to_line t v in
+      ( match v with
+      | Some v -> Fmt.pf ppf "%s %a :%s" command Fmt.(list ~sep:(any "@ ") string) ps v
+      | None -> Fmt.pf ppf "%s %a" command Fmt.(list ~sep:(any "@ ") string) ps )
+    with _ -> Fmt.string ppf "<irc-command>"
 
 let apply_keys channels keys =
   let rec go acc channels keys = match channels with
@@ -617,11 +632,14 @@ let rec of_line
           Ok (prefix, channel)
       with _ -> Error `Invalid_parameters )
   | Recv RPL, numeric, params ->
-    ( try Ok (prefix, { numeric= int_of_string numeric; params; })
+    ( try
+        Log.debug (fun m -> m "Got an unknown code %S %a:@ %a" numeric Fmt.(Dump.list string) (fst params) Fmt.(Dump.option string) (snd params));
+        Ok (prefix, { numeric= int_of_string numeric; params; })
       with _ -> Error `Invalid_reply )
   | Recv ERR_NONICKNAMEGIVEN, "431", _ -> Ok (prefix, ())
   | Recv ERR_NICKNAMEINUSE, "433", ([ _; nickname ], _) ->
       Ok (prefix, Nickname.of_string_exn nickname) (* TODO(dinosaure): exception leak. *)
+  | Recv ERR_NOTREGISTERED, "451", _ -> Ok (prefix, ())
   | Any, _, _ ->
     ( match command_of_line line with
     | Error _ -> Error `Invalid_command
@@ -656,6 +674,15 @@ let pp_error ppf = function
   | `Invalid_reply -> Fmt.string ppf "Invalid reply"
   | #Decoder.error as err -> Decoder.pp_error ppf err
 
+let pp_host' ppf = function
+  | `Host str -> Fmt.string ppf str
+  | `Ip6 v -> Ipaddr.V6.pp ppf v
+
+let pp_line ppf = function
+  | Some (`Server host), cmd, (msg, v) -> Fmt.pf ppf "%a %s %a %a" pp_host' host cmd Fmt.(Dump.list string) msg Fmt.(Dump.option string) v
+  | Some (`User (user, v, host)), cmd, (msg, v') -> Fmt.pf ppf "%s %a %a %s %a %a" user Fmt.(Dump.option string) v Fmt.(option pp_host') host cmd Fmt.(Dump.list string) msg Fmt.(Dump.option string) v'
+  | None, cmd, (msg, v) -> Fmt.pf ppf "%s %a %a" cmd Fmt.(Dump.list string) msg Fmt.(Dump.option string) v
+
 let decode
   : type a. Decoder.decoder -> a recv -> (a, [> error ]) Decoder.state
   = fun decoder -> function
@@ -667,12 +694,22 @@ let decode
         then Decoder.peek_line ~k:(k (x :: acc)) decoder
              |> Decoder.reword_error (fun err -> (err :> error))
         else Decoder.return decoder (List.rev (x :: acc))
-      | Error err -> Decoder.leave_with decoder (err :> error) in
+      | Error err ->
+          Log.err (fun m -> m "Got an error while decoding %a: %a" pp_line line pp_error err);
+          Decoder.leave_with decoder (err :> error)
+      | exception exn ->
+          Log.err (fun m -> m "Got an exception while decoding %a: %S" pp_line line (Printexc.to_string exn));
+          Decoder.leave_with decoder `Invalid_command in
     Decoder.peek_line ~k:(k []) decoder
     |> Decoder.reword_error (fun err -> (err :> error))
   | w ->
     let k line decoder = match of_line w line with
       | Ok v -> Decoder.junk_eol decoder ; Decoder.return decoder v
-      | Error err -> Decoder.leave_with decoder (err :> error) in
+      | Error err ->
+          Log.err (fun m -> m "Got an error while decoding %a: %a" pp_line line pp_error err);
+          Decoder.leave_with decoder (err :> error)
+      | exception exn ->
+          Log.err (fun m -> m "Got an exception while decoding %a: %S" pp_line line (Printexc.to_string exn));
+          Decoder.leave_with decoder `Invalid_command in
     Decoder.peek_line ~k decoder
     |> Decoder.reword_error (fun err -> (err :> error))
